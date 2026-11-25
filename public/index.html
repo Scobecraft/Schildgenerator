@@ -41,7 +41,7 @@
       <button class="btn btn-ghost" id="btnLogos">Logo-Bibliothek</button>
       <button class="btn btn-primary" id="btnPrint">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9V3h10v6M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M7 14h10v7H7z"/></svg>
-        Drucken <span class="badge" id="printCount">0</span>
+        Set drucken <span class="badge" id="printCount">0</span>
       </button>
     </div>
   </header>
@@ -49,6 +49,24 @@
   <main class="app">
     <!-- Linke Spalte: Eingabe + Liste -->
     <aside class="panel panel-left">
+      <section class="set-bar">
+        <div class="set-head">
+          <div>
+            <div class="set-label">Aktuelles Set</div>
+            <div class="set-name" id="setName">–</div>
+            <div class="set-meta muted" id="setMeta"></div>
+          </div>
+          <button class="btn btn-sm" id="btnSets" title="Alle gespeicherten Sets anzeigen">Alle Sets</button>
+        </div>
+        <div class="set-actions">
+          <button class="btn btn-primary" id="btnPrintSet">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9V3h10v6M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M7 14h10v7H7z"/></svg>
+            Ganzes Set drucken
+          </button>
+          <button class="btn" id="btnNewSet" title="Leeres neues Set beginnen">+ Neues Set</button>
+        </div>
+      </section>
+
       <section class="card add-card">
         <h2>Artikel hinzufügen</h2>
         <textarea id="inputCodes" rows="4" spellcheck="false" placeholder="EAN oder Artikelnummer – eine pro Zeile&#10;Menge optional, z. B.  5099206080263 x3"></textarea>
@@ -102,7 +120,7 @@
   <dialog id="printDialog" class="modal">
     <form method="dialog" class="modal-inner">
       <div class="modal-head">
-        <h2>Drucken &amp; PDF</h2>
+        <h2>Drucken &amp; PDF <span class="muted" id="printSetName" style="font-weight:500;font-size:14px"></span></h2>
         <button class="icon-btn" value="cancel" aria-label="Schließen">✕</button>
       </div>
       <div class="print-grid">
@@ -127,6 +145,18 @@
         <button class="btn" value="cancel">Abbrechen</button>
         <button class="btn btn-primary" id="btnPdf" type="button">PDF herunterladen</button>
       </div>
+    </form>
+  </dialog>
+
+  <!-- Alle Sets -->
+  <dialog id="setsDialog" class="modal">
+    <form method="dialog" class="modal-inner">
+      <div class="modal-head">
+        <h2>Alle Sets</h2>
+        <button class="icon-btn" value="cancel" aria-label="Schließen">✕</button>
+      </div>
+      <p class="muted" style="margin:0">Bei jedem Neuladen der Seite beginnt ein neues Set. Sets ohne Schilder werden nicht gespeichert.</p>
+      <ul class="set-list" id="setList"></ul>
     </form>
   </dialog>
 

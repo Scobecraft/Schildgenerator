@@ -87,7 +87,7 @@
       if (!res.placed.length) { tooBig.push(...remaining); break; }
       // innerhalb der Seite in Originalreihenfolge lesen
       res.placed.sort((a, b) => (a.y - b.y) || (a.x - b.x));
-      const page = { w: useL ? paper.h : paper.w, h: useL ? paper.w : paper.h, landscape: useL, items: res.placed.map((p) => ({ id: p.item.id, x: p.x, y: p.y, w: p.w, h: p.h, rot: p.rot, tw: p.item.w, th: p.item.h })) };
+      const page = { w: useL ? paper.h : paper.w, h: useL ? paper.w : paper.h, landscape: useL, items: res.placed.map((p) => ({ id: p.item.id, tag: p.item.tag, x: p.x, y: p.y, w: p.w, h: p.h, rot: p.rot, tw: p.item.w, th: p.item.h })) };
       center(page, opt);
       pages.push(page);
       remaining = res.rest;

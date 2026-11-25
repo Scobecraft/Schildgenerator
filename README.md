@@ -32,9 +32,18 @@ Beim ersten Start werden die nötigen Programme installiert. Danach öffnet sich
 1. Links EAN oder Artikelnummern eingeben (eine pro Zeile, Menge z. B. `5099206080263 x3`) → **Abrufen**.
 2. Schild in der Liste anklicken → Vorschau in der Mitte, Daten rechts ändern.
 3. Felder in der Vorschau anklicken und mit der Maus verschieben (oder Pfeiltasten). Größe über den Regler.
-4. **Drucken** → Papier und Ränder wählen → **PDF herunterladen**. Die Schilder werden automatisch platzsparend angeordnet (z. B. 2 × A5 auf A4 quer).
+4. **Ganzes Set drucken** → Papier und Ränder wählen → **PDF herunterladen**. Die Schilder werden automatisch platzsparend angeordnet (z. B. 2 × A5 auf A4 quer).
 
-Die Liste bleibt im Browser gespeichert.
+### Sets
+
+- Alle Schilder landen im **aktuellen Set**. Name = Datum und Uhrzeit beim Anlegen.
+- Bei jedem Neuladen der Seite beginnt ein neues Set, ein weiteres jederzeit über **+ Neues Set**.
+- **Alle Sets** zeigt die gespeicherten Sets: öffnen, komplett drucken oder löschen.
+- Sets liegen auf dem Server (`data/sets`) und gelten für alle Nutzer. Sie werden **48 Stunden nach der letzten Änderung automatisch gelöscht**. Leere Sets werden gar nicht gespeichert.
+
+### Herstellerlogo
+
+Pro Schild umschaltbar zwischen **Original** (Standard) und **Hochskaliert**. Hochskaliert vergrößert kleine Logos und schärft die Kanten. Sehr kleine Details (z. B. ®) können dabei verschwinden.
 
 ## Woher die Daten kommen
 

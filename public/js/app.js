@@ -8,25 +8,74 @@
   const DEFAULT_TEMPLATE = 'expert-a5';
 
   // ---------------------------------------------------------------- Zustand
+  // state.tags = Schilder des aktuellen Sets. Sets liegen auf dem Server (data/sets).
+  // Im Browser werden nur Einstellungen gemerkt (Druckoptionen, Vorlage).
   let state = { tags: [], selectedId: null, print: { paper: 'A4', margin: 0, gap: 0, rotate: true, cut: true }, template: DEFAULT_TEMPLATE };
   let selectedField = null;
+  let legacyTags = [];
 
   try {
     const saved = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
-    if (saved && Array.isArray(saved.tags)) state = { ...state, ...saved, print: { ...state.print, ...(saved.print || {}) } };
+    if (saved) {
+      state.print = { ...state.print, ...(saved.print || {}) };
+      if (saved.template) state.template = saved.template;
+      if (Array.isArray(saved.tags) && saved.tags.length) legacyTags = saved.tags; // aus der Zeit vor den Sets
+    }
   } catch (_) { /* leer starten */ }
-  // Abrufe, die beim Schließen liefen, gelten als abgebrochen
-  state.tags.forEach((t) => {
-    if (t.status === 'loading') { t.status = 'error'; t.error = 'Abruf unterbrochen – bitte neu laden.'; }
-  });
+
+  function setName(d) {
+    return d.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) + ' Uhr';
+  }
+  function makeSet() {
+    const d = new Date();
+    return { id: d.toISOString().replace(/[:.]/g, '-') + '-' + Math.random().toString(36).slice(2, 8), name: setName(d), createdAt: d.toISOString(), saved: false };
+  }
+  // Bei jedem Laden der Seite beginnt ein neues Set
+  let currentSet = makeSet();
+
+  function markInterrupted(tags) {
+    tags.forEach((t) => {
+      if (t.status === 'loading') { t.status = 'error'; t.error = 'Abruf unterbrochen – bitte neu laden.'; }
+    });
+  }
+
+  function setPayload() {
+    return { id: currentSet.id, name: currentSet.name, createdAt: currentSet.createdAt, tags: state.tags };
+  }
 
   let saveTimer = null;
+  let savePromise = Promise.resolve();
   function save() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify({ print: state.print, template: state.template })); } catch (_) { /* egal */ }
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (_) { toast('Speichern im Browser nicht möglich (Speicher voll?).', 'err'); }
-    }, 250);
+    saveTimer = setTimeout(saveSetNow, 400);
+    renderSetBar();
   }
+  function saveSetNow() {
+    clearTimeout(saveTimer);
+    const set = currentSet;
+    const body = JSON.stringify(setPayload());
+    const empty = state.tags.length === 0;
+    savePromise = savePromise.then(async () => {
+      try {
+        if (empty) {
+          if (set.saved) { await fetch('/api/sets/' + set.id, { method: 'DELETE' }); set.saved = false; }
+          return;
+        }
+        const r = await fetch('/api/sets/' + set.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body });
+        if (!r.ok) throw new Error('Status ' + r.status);
+        set.saved = true;
+      } catch (e) {
+        toast('Set konnte nicht auf dem Server gespeichert werden: ' + e.message, 'err');
+      }
+    });
+    return savePromise;
+  }
+  // Beim Verlassen/Neuladen noch schnell speichern
+  window.addEventListener('pagehide', () => {
+    if (!state.tags.length) return;
+    try { fetch('/api/sets/' + currentSet.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(setPayload()), keepalive: true }); } catch (_) { /* egal */ }
+  });
 
   const uid = () => Math.random().toString(36).slice(2, 10);
   const tpl = (t) => PT.Templates[t.template] || PT.Templates[DEFAULT_TEMPLATE];
@@ -38,7 +87,7 @@
     return {
       id: uid(), query: query || '', qty, template: state.template || DEFAULT_TEMPLATE, status: query ? 'loading' : 'manual',
       error: null, warnings: [],
-      data: { group: '', name: '', artnr: '', bullets: [], price: null, uvp: null, showUvp: true, qrUrl: '', logoUrl: '', logoData: '' },
+      data: { group: '', name: '', artnr: '', bullets: [], price: null, uvp: null, showUvp: true, qrUrl: '', logoUrl: '', logoData: '', logoDataUp: '', logoUpscale: false },
       meta: {}, layout: {},
     };
   }
@@ -361,15 +410,21 @@
 
   function logoBlock(t) {
     const d = t.data;
-    const src = d.logoData || (!d.logoUrl ? '' : d.logoUrl.startsWith('/') ? d.logoUrl : '/api/img?url=' + encodeURIComponent(d.logoUrl));
+    const src = PT.logoSrcFor(d);
+    const up = d.logoUpscale === true;
     let pill = '';
     if (d.logoData) pill = '<span class="pill">eigenes PNG</span>';
-    else if (d.logoUrl && d.logoUrl.startsWith('/logos/')) pill = '<span class="pill pill-ok">Bibliothek · hochauflösend</span>';
-    else if (d.logoUrl) pill = '<span class="pill pill-orange">expert.de · hochskaliert</span>';
+    else if (d.logoUrl && d.logoUrl.startsWith('/logos/')) pill = '<span class="pill pill-ok">aus der Bibliothek</span>';
+    else if (d.logoUrl) pill = '<span class="pill">von expert.de</span>';
     return `
       <div class="ed-field"><span>Herstellerlogo ${pill}</span>
         <div class="logo-prev">${src ? `<img src="${esc(src)}" alt="">` : '<span class="muted">kein Logo</span>'}</div>
-        ${d.logoUrl && !d.logoUrl.startsWith('/') && !d.logoData ? '<div class="uvp-note" style="margin:0 0 8px">Das Logo von expert.de ist klein und wurde automatisch hochskaliert und geschärft. Ein großes Original-PNG des Herstellers ist trotzdem noch schärfer.</div>' : ''}
+        ${src ? `
+        <div class="seg" role="group" aria-label="Logo-Darstellung">
+          <button type="button" class="${up ? '' : 'on'}" data-do="logoMode" data-mode="original" aria-pressed="${!up}">Original</button>
+          <button type="button" class="${up ? 'on' : ''}" data-do="logoMode" data-mode="up" aria-pressed="${up}">Hochskaliert</button>
+        </div>
+        <div class="uvp-note" style="margin:0 0 8px">${up ? 'Das Logo wird vergrößert und die Kanten werden geschärft. Sehr kleine Details können dabei verloren gehen.' : 'Das Logo wird so verwendet, wie es ist. Kleine Logos können im Druck unscharf wirken – dann „Hochskaliert“ wählen.'}</div>` : ''}
         <div class="btn-row">
           <label class="btn btn-sm"><input type="file" accept="image/png" hidden data-do="logoBrand">PNG für Marke${t.meta.logoBrand ? ' „' + esc(t.meta.logoBrand) + '“' : ''}</label>
           <label class="btn btn-sm"><input type="file" accept="image/png" hidden data-do="logoOnly">PNG nur hier</label>
@@ -464,10 +519,13 @@
     } else if (a === 'uvpReset') {
       t.meta.uvp = {};
       enqueueFetch(t); renderEditor();
+    } else if (a === 'logoMode') {
+      t.data.logoUpscale = b.dataset.mode === 'up';
+      save(); renderStage(); renderEditor();
     } else if (a === 'logoExpert') {
       t.data.logoUrl = t.meta.expertLogoUrl; t.data.logoData = ''; save(); renderStage(); renderEditor();
     } else if (a === 'logoRemove') {
-      t.data.logoUrl = ''; t.data.logoData = ''; save(); renderStage(); renderEditor();
+      t.data.logoUrl = ''; t.data.logoData = ''; t.data.logoDataUp = ''; save(); renderStage(); renderEditor();
     }
   });
 
@@ -483,6 +541,7 @@
       try {
         const r = await api('/api/logos/prepare', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dataUrl }) });
         t.data.logoData = r.dataUrl;
+        t.data.logoDataUp = r.dataUrlUp;
       } catch (err) { toast(err.message, 'err'); return; }
       save(); renderStage(); renderEditor(); return;
     }
@@ -541,20 +600,24 @@
   });
 
   // ---------------------------------------------------------------- Druck
-  function printableItems() {
+  // Was gedruckt wird: standardmäßig das aktuelle Set, aus der Set-Liste auch ein anderes
+  let printSource = null;
+  const printTags = () => (printSource ? printSource.tags : state.tags);
+
+  function printableItems(tags = state.tags) {
     const out = [];
-    for (const t of state.tags) {
+    for (const t of tags) {
       if (t.status === 'loading' || t.status === 'error') continue;
       if (!(t.data.price > 0)) continue;
       const T = tpl(t);
-      for (let i = 0; i < t.qty; i++) out.push({ id: t.id, w: T.width, h: T.height });
+      for (let i = 0; i < t.qty; i++) out.push({ id: t.id, tag: t, w: T.width, h: T.height });
     }
     return out;
   }
 
   function sheetHtml(page, opt) {
     const slots = page.items.map((it) => {
-      const t = getTag(it.id);
+      const t = it.tag || getTag(it.id);
       const inner = tpl(t).render(t);
       const rot = it.rot ? `transform:translateX(${it.th}mm) rotate(90deg);transform-origin:0 0;` : '';
       return `<div class="slot" style="left:${it.x}mm;top:${it.y}mm;width:${it.w}mm;height:${it.h}mm">
@@ -591,7 +654,7 @@ ${pages.map((p) => sheetHtml(p, opt)).join('\n')}
 
   function currentLayout() {
     const opt = state.print;
-    return SheetLayout.arrange(printableItems(), { paper: opt.paper, margin: +opt.margin || 0, gap: +opt.gap || 0, rotate: opt.rotate });
+    return SheetLayout.arrange(printableItems(printTags()), { paper: opt.paper, margin: +opt.margin || 0, gap: +opt.gap || 0, rotate: opt.rotate });
   }
 
   function renderPrintPreview() {
@@ -599,15 +662,17 @@ ${pages.map((p) => sheetHtml(p, opt)).join('\n')}
     $('#optPaper').value = opt.paper; $('#optMargin').value = opt.margin; $('#optGap').value = opt.gap;
     $('#optRotate').checked = opt.rotate; $('#optCut').checked = opt.cut;
     const res = currentLayout();
-    const n = printableItems().length;
+    const tags = printTags();
+    const n = printableItems(tags).length;
     const pages = res.pages;
+    $('#printSetName').textContent = '· Set ' + (printSource ? printSource.name : currentSet.name);
     $('#printSummary').innerHTML = n
       ? `<b>${n}</b> Schild${n === 1 ? '' : 'er'} auf <b>${pages.length}</b> Blatt ${esc(res.paper.label)}`
       : 'Keine druckbaren Schilder. (Schilder brauchen einen Preis und eine Menge über 0.)';
     const warn = [];
-    const skipped = state.tags.filter((t) => t.qty > 0 && (t.status === 'loading' || t.status === 'error' || !(t.data.price > 0)));
+    const skipped = tags.filter((t) => t.qty > 0 && (t.status === 'loading' || t.status === 'error' || !(t.data.price > 0)));
     if (skipped.length) warn.push(`${skipped.length} Schild(er) werden nicht gedruckt (Fehler, noch im Abruf oder ohne Preis).`);
-    const changed = state.tags.filter((t) => t.qty > 0 && t.meta && t.meta.fetchedPrice != null && Math.abs((t.data.price || 0) - t.meta.fetchedPrice) > 0.004);
+    const changed = tags.filter((t) => t.qty > 0 && t.meta && t.meta.fetchedPrice != null && Math.abs((t.data.price || 0) - t.meta.fetchedPrice) > 0.004);
     if (changed.length) warn.push(`Preis weicht vom expert.de-Marktpreis ab bei: ${changed.map((t) => esc(t.data.name || t.query)).join(', ')}.`);
     if (res.tooBig.length) warn.push(`${res.tooBig.length} Schild(er) passen nicht aufs Papier – Rand verkleinern oder größeres Papier wählen.`);
     $('#printWarn').innerHTML = warn.join('<br>');
@@ -624,10 +689,14 @@ ${pages.map((p) => sheetHtml(p, opt)).join('\n')}
     PT.fitAll(prev);
   }
 
-  $('#btnPrint').addEventListener('click', () => {
+  function openPrint(source) {
+    printSource = source || null;
     renderPrintPreview();
-    $('#printDialog').showModal();
-  });
+    if (!$('#printDialog').open) $('#printDialog').showModal();
+  }
+  $('#printDialog').addEventListener('close', () => { printSource = null; });
+  $('#btnPrint').addEventListener('click', () => openPrint(null));
+  $('#btnPrintSet').addEventListener('click', () => openPrint(null));
   ['optPaper', 'optMargin', 'optGap', 'optRotate', 'optCut'].forEach((id) => $('#' + id).addEventListener('change', () => {
     state.print = {
       paper: $('#optPaper').value,
@@ -651,7 +720,7 @@ ${pages.map((p) => sheetHtml(p, opt)).join('\n')}
       const blob = await r.blob();
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = `preisschilder-${new Date().toISOString().slice(0, 10)}.pdf`;
+      a.download = `preisschilder-${(printSource ? printSource.name : currentSet.name).replace(/ Uhr$/, '').replace(/[^0-9A-Za-z]+/g, '-').replace(/^-|-$/g, '')}.pdf`;
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 10000);
       toast('PDF heruntergeladen.', 'ok');
@@ -661,6 +730,87 @@ ${pages.map((p) => sheetHtml(p, opt)).join('\n')}
       btn.disabled = false;
       btn.textContent = 'PDF herunterladen';
     }
+  });
+
+  // ---------------------------------------------------------------- Sets
+  function renderSetBar() {
+    const pieces = state.tags.reduce((n, t) => n + (Number(t.qty) || 0), 0);
+    $('#setName').textContent = currentSet.name;
+    $('#setMeta').textContent = state.tags.length
+      ? `${state.tags.length} Schild${state.tags.length === 1 ? '' : 'er'} · ${pieces} Stück zum Drucken`
+      : 'Noch leer – wird gespeichert, sobald ein Schild drin ist';
+    $('#btnPrintSet').disabled = printableItems(state.tags).length === 0;
+  }
+
+  const fmtDate = (iso) => new Date(iso).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+
+  async function renderSetList() {
+    const ul = $('#setList');
+    ul.innerHTML = '<li class="set-empty"><span class="spinner"></span></li>';
+    let list = [];
+    try { list = await api('/api/sets'); } catch (e) { ul.innerHTML = `<li class="set-empty">${esc(e.message)}</li>`; return; }
+    if (!list.length) { ul.innerHTML = '<li class="set-empty">Noch keine gespeicherten Sets.</li>'; return; }
+    ul.innerHTML = list.map((x) => `
+      <li class="set-row ${x.id === currentSet.id ? 'current' : ''}" data-id="${esc(x.id)}">
+        <div class="set-row-name">${esc(x.name)} ${x.id === currentSet.id ? '<span class="pill pill-orange">aktuell</span>' : ''}</div>
+        <div class="set-row-meta">${x.tagCount} Schild${x.tagCount === 1 ? '' : 'er'} · ${x.pieceCount} Stück${x.preview.length ? ' · ' + esc(x.preview.join(', ')) + (x.tagCount > 3 ? ' …' : '') : ''}${x.deleteAt ? ' · wird gelöscht am ' + fmtDate(x.deleteAt) : ''}</div>
+        <div class="set-row-actions">
+          ${x.id === currentSet.id ? '' : '<button class="btn btn-sm" type="button" data-set="open">Öffnen</button>'}
+          <button class="btn btn-sm btn-primary" type="button" data-set="print">Drucken</button>
+          <button class="btn btn-sm" type="button" data-set="del" title="Set löschen">Löschen</button>
+        </div>
+      </li>`).join('');
+  }
+
+  async function openSet(id) {
+    await saveSetNow();
+    const set = await api('/api/sets/' + encodeURIComponent(id));
+    markInterrupted(set.tags || []);
+    currentSet = { id: set.id, name: set.name, createdAt: set.createdAt, saved: true };
+    state.tags = set.tags || [];
+    state.selectedId = state.tags[0] ? state.tags[0].id : null;
+    selectedField = null;
+    renderAll();
+  }
+
+  async function newSet() {
+    await saveSetNow();
+    currentSet = makeSet();
+    state.tags = [];
+    state.selectedId = null;
+    selectedField = null;
+    renderAll();
+    toast('Neues Set begonnen: ' + currentSet.name, 'ok');
+  }
+
+  $('#btnNewSet').addEventListener('click', newSet);
+  $('#btnSets').addEventListener('click', async () => {
+    await saveSetNow();
+    $('#setsDialog').showModal();
+    renderSetList();
+  });
+  $('#setList').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-set]');
+    if (!b) return;
+    const id = b.closest('.set-row').dataset.id;
+    const act = b.dataset.set;
+    try {
+      if (act === 'open') {
+        await openSet(id);
+        $('#setsDialog').close();
+      } else if (act === 'print') {
+        if (id === currentSet.id) { $('#setsDialog').close(); openPrint(null); return; }
+        const set = await api('/api/sets/' + encodeURIComponent(id));
+        $('#setsDialog').close();
+        openPrint({ name: set.name, tags: set.tags || [] });
+      } else if (act === 'del') {
+        const name = b.closest('.set-row').querySelector('.set-row-name').firstChild.textContent.trim();
+        if (!confirm(`Set „${name}“ endgültig löschen?`)) return;
+        await api('/api/sets/' + encodeURIComponent(id), { method: 'DELETE' });
+        if (id === currentSet.id) { currentSet = makeSet(); state.tags = []; state.selectedId = null; renderAll(); }
+        renderSetList();
+      }
+    } catch (err) { toast(err.message, 'err'); }
   });
 
   // ---------------------------------------------------------------- Logo-Bibliothek
@@ -707,12 +857,22 @@ ${pages.map((p) => sheetHtml(p, opt)).join('\n')}
   $('#btnTheme').title = document.documentElement.getAttribute('data-theme') === 'dark' ? 'Hellen Modus einschalten' : 'Dunkelmodus einschalten';
 
   // ---------------------------------------------------------------- Start
-  function renderAll() { renderList(); renderStage(); renderEditor(); }
+  function renderAll() { renderList(); renderStage(); renderEditor(); renderSetBar(); }
 
   $('#inputTemplate').innerHTML = Object.values(PT.Templates).map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join('');
   $('#inputTemplate').value = state.template || DEFAULT_TEMPLATE;
 
 
+  if (legacyTags.length) {
+    markInterrupted(legacyTags);
+    const old = makeSet();
+    old.name = old.name.replace(' Uhr', ' Uhr (übernommen)');
+    fetch('/api/sets/' + old.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: old.id, name: old.name, createdAt: old.createdAt, tags: legacyTags }) })
+      .then((r) => { if (r.ok) toast('Deine bisherigen Schilder liegen jetzt im Set „' + old.name + '“ (unter „Alle Sets“).', 'ok'); })
+      .catch(() => {});
+    legacyTags = [];
+    try { localStorage.setItem(STORE_KEY, JSON.stringify({ print: state.print, template: state.template })); } catch (_) { /* egal */ }
+  }
   if (!state.selectedId && state.tags[0]) state.selectedId = state.tags[0].id;
   document.fonts.ready.then(renderAll);
   renderAll();

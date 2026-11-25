@@ -49,7 +49,7 @@ app.post('/api/logos', async (req, res) => {
     if (!m) return res.status(400).json({ error: 'Bitte nur PNG-Dateien verwenden.' });
     let buf = Buffer.from(m[1], 'base64');
     if (!buf.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return res.status(400).json({ error: 'Die Datei ist kein gültiges PNG.' });
-    buf = (await prepareLogo(buf, 'image/png')).buf;
+    buf = (await prepareLogo(buf, 'image/png', { upscale: false })).buf;
     fs.writeFileSync(path.join(LOGO_DIR, name + '.png'), buf);
     res.json({ brand: name, url: libraryLogo(name) });
   } catch (e) {
@@ -61,8 +61,10 @@ app.post('/api/logos/prepare', async (req, res) => {
   try {
     const m = /^data:image\/png;base64,(.+)$/.exec(String((req.body || {}).dataUrl || ''));
     if (!m) return res.status(400).json({ error: 'Bitte nur PNG-Dateien verwenden.' });
-    const r = await prepareLogo(Buffer.from(m[1], 'base64'), 'image/png');
-    res.json({ dataUrl: 'data:image/png;base64,' + r.buf.toString('base64'), ...r.info });
+    const raw = Buffer.from(m[1], 'base64');
+    const orig = await prepareLogo(raw, 'image/png', { upscale: false });
+    const up = await prepareLogo(raw, 'image/png', { upscale: true });
+    res.json({ dataUrl: 'data:image/png;base64,' + orig.buf.toString('base64'), dataUrlUp: 'data:image/png;base64,' + up.buf.toString('base64') });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -70,6 +72,79 @@ app.post('/api/logos/prepare', async (req, res) => {
 app.delete('/api/logos/:brand', (req, res) => {
   const f = path.join(LOGO_DIR, slug(req.params.brand) + '.png');
   if (fs.existsSync(f)) fs.unlinkSync(f);
+  res.json({ ok: true });
+});
+
+// ---------- Sets (Sammlungen von Preisschildern, auf dem Server gespeichert) ----------
+const SET_DIR = path.join(__dirname, '..', 'data', 'sets');
+fs.mkdirSync(SET_DIR, { recursive: true });
+const validSetId = (id) => /^[A-Za-z0-9_-]{6,80}$/.test(String(id || ''));
+const setFile = (id) => path.join(SET_DIR, id + '.json');
+
+// Sets werden 48 Stunden nach der letzten Änderung automatisch gelöscht (Speicherplatz sparen)
+const SET_KEEP_MS = 48 * 60 * 60 * 1000;
+function setLastChange(file) {
+  try {
+    const s = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const t = Date.parse(s.updatedAt || s.createdAt);
+    if (!Number.isNaN(t)) return t;
+  } catch (_) { /* Dateidatum nehmen */ }
+  return fs.statSync(file).mtimeMs;
+}
+function cleanupSets() {
+  const now = Date.now();
+  let removed = 0;
+  for (const f of fs.readdirSync(SET_DIR)) {
+    const file = path.join(SET_DIR, f);
+    try {
+      if (f.endsWith('.tmp') && now - fs.statSync(file).mtimeMs > 60 * 60 * 1000) { fs.unlinkSync(file); continue; }
+      if (f.endsWith('.json') && now - setLastChange(file) > SET_KEEP_MS) { fs.unlinkSync(file); removed++; }
+    } catch (_) { /* nächste Datei */ }
+  }
+  if (removed) console.log(`${removed} Set(s) älter als 48 Stunden gelöscht.`);
+}
+cleanupSets();
+setInterval(cleanupSets, 60 * 60 * 1000).unref();
+
+app.get('/api/sets', (req, res) => {
+  cleanupSets();
+  const list = [];
+  for (const f of fs.readdirSync(SET_DIR)) {
+    if (!f.endsWith('.json')) continue;
+    try {
+      const s = JSON.parse(fs.readFileSync(path.join(SET_DIR, f), 'utf8'));
+      const tags = Array.isArray(s.tags) ? s.tags : [];
+      list.push({
+        id: s.id, name: s.name, createdAt: s.createdAt, updatedAt: s.updatedAt,
+        deleteAt: new Date((Date.parse(s.updatedAt || s.createdAt) || Date.now()) + SET_KEEP_MS).toISOString(),
+        tagCount: tags.length,
+        pieceCount: tags.reduce((n, t) => n + (Number(t.qty) || 0), 0),
+        preview: tags.slice(0, 3).map((t) => (t.data && t.data.name) || t.query || '').filter(Boolean),
+      });
+    } catch (_) { /* kaputte Datei ignorieren */ }
+  }
+  list.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  res.json(list);
+});
+
+app.get('/api/sets/:id', (req, res) => {
+  if (!validSetId(req.params.id) || !fs.existsSync(setFile(req.params.id))) return res.status(404).json({ error: 'Set nicht gefunden.' });
+  res.type('json').send(fs.readFileSync(setFile(req.params.id), 'utf8'));
+});
+
+app.put('/api/sets/:id', (req, res) => {
+  const id = req.params.id;
+  const b = req.body || {};
+  if (!validSetId(id) || b.id !== id || !Array.isArray(b.tags)) return res.status(400).json({ error: 'Ungültiges Set.' });
+  const set = { id, name: String(b.name || '').slice(0, 100), createdAt: b.createdAt, updatedAt: new Date().toISOString(), tags: b.tags };
+  const tmp = setFile(id) + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(set));
+  fs.renameSync(tmp, setFile(id)); // atomar: nie halb geschriebene Dateien
+  res.json({ ok: true, updatedAt: set.updatedAt });
+});
+
+app.delete('/api/sets/:id', (req, res) => {
+  if (validSetId(req.params.id) && fs.existsSync(setFile(req.params.id))) fs.unlinkSync(setFile(req.params.id));
   res.json({ ok: true });
 });
 
@@ -102,19 +177,34 @@ const imgCache = new Map();
 const ALLOWED_IMG_HOSTS = ['cdn.expert.de', 'www.expert.de', 'production.brntgs.expert.de'];
 
 
+// Logo als PNG: ?url=<expert-Logo> oder ?lib=<Marke aus der Bibliothek>; &up=1 = hochskaliert
 app.get('/api/img', async (req, res) => {
   try {
-    const url = new URL(String(req.query.url || ''));
-    if (url.protocol !== 'https:' || !ALLOWED_IMG_HOSTS.includes(url.hostname)) return res.status(400).send('Host nicht erlaubt');
-    if (imgCache.has(url.href)) return res.type('image/png').send(imgCache.get(url.href));
-    const r = await fetch(url.href);
-    if (!r.ok) return res.status(502).send('Logo konnte nicht geladen werden');
-    const mime = (r.headers.get('content-type') || '').split(';')[0];
-    let buf = Buffer.from(await r.arrayBuffer());
-    const isPng = buf.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
-    buf = (await prepareLogo(buf, isPng ? 'image/png' : (mime || 'image/svg+xml'))).buf;
-    imgCache.set(url.href, buf);
-    res.type('image/png').set('Cache-Control', 'public, max-age=86400').send(buf);
+    const up = req.query.up === '1';
+    let key, load;
+    if (req.query.lib) {
+      const name = slug(req.query.lib);
+      const file = path.join(LOGO_DIR, name + '.png');
+      if (!name || !fs.existsSync(file)) return res.status(404).send('Logo nicht gefunden');
+      key = `lib:${name}:${fs.statSync(file).mtimeMs}:${up}`;
+      load = async () => ({ buf: fs.readFileSync(file), mime: 'image/png' });
+    } else {
+      const url = new URL(String(req.query.url || ''));
+      if (url.protocol !== 'https:' || !ALLOWED_IMG_HOSTS.includes(url.hostname)) return res.status(400).send('Host nicht erlaubt');
+      key = `url:${url.href}:${up}`;
+      load = async () => {
+        const r = await fetch(url.href);
+        if (!r.ok) throw new Error('Logo konnte nicht geladen werden');
+        return { buf: Buffer.from(await r.arrayBuffer()), mime: (r.headers.get('content-type') || '').split(';')[0] };
+      };
+    }
+    if (!imgCache.has(key)) {
+      const { buf, mime } = await load();
+      const isPng = buf.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+      imgCache.set(key, (await prepareLogo(buf, isPng ? 'image/png' : (mime || 'image/svg+xml'), { upscale: up })).buf);
+      if (imgCache.size > 300) imgCache.delete(imgCache.keys().next().value);
+    }
+    res.type('image/png').set('Cache-Control', 'public, max-age=86400').send(imgCache.get(key));
   } catch (e) {
     res.status(500).send(e.message);
   }

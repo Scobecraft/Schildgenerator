@@ -17,6 +17,20 @@
   }
 
   const Templates = {};
+
+  // Bildquelle des Herstellerlogos – Original (Standard) oder hochskaliert (d.logoUpscale)
+  function logoSrcFor(d, base = '') {
+    const up = d.logoUpscale === true;
+    if (d.logoData) return up && d.logoDataUp ? d.logoDataUp : d.logoData;
+    if (!d.logoUrl) return '';
+    if (d.logoUrl.startsWith('/logos/')) {
+      if (!up) return base + d.logoUrl;
+      const name = d.logoUrl.replace(/^\/logos\//, '').replace(/\.png.*$/, '');
+      const v = (d.logoUrl.split('v=')[1] || '');
+      return base + '/api/img?lib=' + encodeURIComponent(name) + '&up=1&v=' + encodeURIComponent(v);
+    }
+    return base + '/api/img?url=' + encodeURIComponent(d.logoUrl) + (up ? '&up=1' : '');
+  }
   const UVPT = { size: 9.07, stretch: 74, cx: 16.65, maxW: 30.6 };
 
   /* ------------------------------------------------------------------ */
@@ -54,7 +68,7 @@
       const showUvp = d.showUvp !== false && pct !== null && pct >= 1;
       const bullets = (d.bullets || []).filter((b) => String(b).trim());
       const qrSrc = d.qrUrl ? (opts.qrBase || '') + '/api/qr?text=' + encodeURIComponent(d.qrUrl) : '';
-      const logoSrc = d.logoData || (!d.logoUrl ? '' : d.logoUrl.startsWith('/') ? (opts.qrBase || '') + d.logoUrl : (opts.qrBase || '') + '/api/img?url=' + encodeURIComponent(d.logoUrl));
+      const logoSrc = logoSrcFor(d, opts.qrBase || '');
 
       return `
 <div class="pt pt-expert-a5" data-template="expert-a5" style="width:148mm;height:210mm">
@@ -257,6 +271,6 @@
     root.querySelectorAll('.pt').forEach(fitTag);
   }
 
-  window.PT = { Templates, fitTag, fitAll, savingsPercent, fmtUvp, esc };
+  window.PT = { Templates, fitTag, fitAll, savingsPercent, fmtUvp, esc, logoSrcFor };
   window.__fitAll = () => fitAll(document);
 })();

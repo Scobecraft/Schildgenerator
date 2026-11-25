@@ -14,7 +14,7 @@ const MAX_FACTOR = 16;
 const BLUR = 0.45; // Glättung in Original-Pixeln
 
 // Läuft im Browser (Chromium) – dort gibt es Canvas mit hochwertiger Skalierung.
-async function processInPage({ src, isSvg, targetWidth, maxFactor, blurPx }) {
+async function processInPage({ src, isSvg, targetWidth, maxFactor, blurPx, upscale }) {
   const img = new Image();
   img.src = src;
   await img.decode();
@@ -45,7 +45,8 @@ async function processInPage({ src, isSvg, targetWidth, maxFactor, blurPx }) {
     c = t; w = cw; h = ch;
   }
 
-  // Schon groß genug (z. B. selbst hochgeladenes Logo) -> fertig
+  // Original gewünscht oder schon groß genug (z. B. selbst hochgeladenes Logo) -> fertig
+  if (!upscale) return { dataUrl: c.toDataURL('image/png'), upscaled: false, method: 'none' };
   if (isSvg || w >= targetWidth * 0.75) return { dataUrl: c.toDataURL('image/png'), upscaled: false, method: 'none' };
 
   const S = Math.min(maxFactor, Math.max(2, Math.ceil(targetWidth / w)));
@@ -146,6 +147,7 @@ async function prepareLogo(buf, mime, opts = {}) {
       targetWidth: TARGET_WIDTH,
       maxFactor: MAX_FACTOR,
       blurPx: opts.blurPx != null ? opts.blurPx : BLUR,
+      upscale: opts.upscale !== false,
     });
     return { buf: Buffer.from(r.dataUrl.split(',')[1], 'base64'), info: { upscaled: r.upscaled, method: r.method, factor: r.factor || 1 } };
   } finally {
