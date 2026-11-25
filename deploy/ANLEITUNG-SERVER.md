@@ -1,6 +1,6 @@
 # Schildgenerator auf einem eigenen Server hosten
 
-Diese Anleitung gilt für **Ubuntu 22.04/24.04 oder Debian 12** mit einem Benutzer, der `sudo` darf.
+Diese Anleitung gilt für **Ubuntu 22.04/24.04 oder Debian 12**. Alle Befehle werden als **root** ausgeführt (ohne `sudo`).
 Am Ende läuft die Seite unter `https://deine-domain` mit Passwortschutz und startet nach einem Neustart des Servers automatisch.
 
 **Voraussetzungen**
@@ -15,17 +15,17 @@ In allen Befehlen `schilder.deinedomain.de` durch deine Domain ersetzen.
 ## 1. Programme installieren
 
 ```bash
-sudo apt update && sudo apt install -y git curl nginx apache2-utils
+apt update && apt install -y git curl nginx apache2-utils
 ```
 
 Node.js 22:
 
 ```bash
-curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
 ```
 
 ```bash
-sudo apt install -y nodejs
+apt install -y nodejs
 ```
 
 Prüfen (sollte `v22…` zeigen):
@@ -45,15 +45,15 @@ Erwartet: `200`. Kommt `403`, blockiert expert.de die IP des Servers. Dann funkt
 ## 3. Eigenen Benutzer anlegen und Code holen
 
 ```bash
-sudo useradd --system --create-home --home-dir /home/schild --shell /usr/sbin/nologin schild
+useradd --system --create-home --home-dir /home/schild --shell /usr/sbin/nologin schild
 ```
 
 ```bash
-sudo git clone https://github.com/Scobecraft/schildgenerator.git /opt/schildgenerator
+git clone https://github.com/Scobecraft/schildgenerator.git /opt/schildgenerator
 ```
 
 ```bash
-sudo chown -R schild:schild /opt/schildgenerator
+chown -R schild:schild /opt/schildgenerator
 ```
 
 ## 4. Abhängigkeiten und Browser installieren
@@ -63,29 +63,29 @@ cd /opt/schildgenerator
 ```
 
 ```bash
-sudo -u schild -H npm install --omit=dev
+su -s /bin/bash schild -c "cd /opt/schildgenerator && npm install --omit=dev"
 ```
 
-Systembibliotheken für Chromium (braucht root):
+Systembibliotheken für Chromium:
 
 ```bash
-sudo npx playwright install-deps chromium
+npx playwright install-deps chromium
 ```
 
 Chromium selbst für den Benutzer `schild`:
 
 ```bash
-sudo -u schild -H npx playwright install chromium
+su -s /bin/bash schild -c "cd /opt/schildgenerator && npx playwright install chromium"
 ```
 
 ## 5. Einstellungen (optional: UVP-Suche)
 
 ```bash
-sudo -u schild cp /opt/schildgenerator/.env.example /opt/schildgenerator/.env
+cp /opt/schildgenerator/.env.example /opt/schildgenerator/.env && chown schild:schild /opt/schildgenerator/.env
 ```
 
 ```bash
-sudo -u schild nano /opt/schildgenerator/.env
+nano /opt/schildgenerator/.env
 ```
 
 Bei `ANTHROPIC_API_KEY=` den Schlüssel eintragen, wenn die UVP automatisch gesucht werden soll. Speichern mit `Strg+O`, Enter, `Strg+X`.
@@ -94,11 +94,11 @@ Bei `ANTHROPIC_API_KEY=` den Schlüssel eintragen, wenn die UVP automatisch gesu
 ## 6. Als Dienst starten (läuft dauerhaft, startet nach Neustart automatisch)
 
 ```bash
-sudo cp /opt/schildgenerator/deploy/schildgenerator.service /etc/systemd/system/
+cp /opt/schildgenerator/deploy/schildgenerator.service /etc/systemd/system/
 ```
 
 ```bash
-sudo systemctl daemon-reload && sudo systemctl enable --now schildgenerator
+systemctl daemon-reload && systemctl enable --now schildgenerator
 ```
 
 Prüfen:
@@ -110,49 +110,49 @@ curl -s http://127.0.0.1:3000/api/status
 Erwartet: `{"store":"expert Asbach",…}`. Wenn nicht, die Fehlermeldung so ansehen:
 
 ```bash
-sudo journalctl -u schildgenerator -n 50 --no-pager
+journalctl -u schildgenerator -n 50 --no-pager
 ```
 
 ## 7. nginx mit Passwortschutz
 
 ```bash
-sudo cp /opt/schildgenerator/deploy/nginx-schildgenerator.conf /etc/nginx/sites-available/schildgenerator
+cp /opt/schildgenerator/deploy/nginx-schildgenerator.conf /etc/nginx/sites-available/schildgenerator
 ```
 
 ```bash
-sudo sed -i 's/schilder.example.de/schilder.deinedomain.de/' /etc/nginx/sites-available/schildgenerator
+sed -i 's/schilder.example.de/schilder.deinedomain.de/' /etc/nginx/sites-available/schildgenerator
 ```
 
 ```bash
-sudo ln -s /etc/nginx/sites-available/schildgenerator /etc/nginx/sites-enabled/schildgenerator
+ln -s /etc/nginx/sites-available/schildgenerator /etc/nginx/sites-enabled/schildgenerator
 ```
 
 Benutzer und Passwort für die Seite anlegen (fragt nach dem Passwort):
 
 ```bash
-sudo htpasswd -c /etc/nginx/schildgenerator.htpasswd mitarbeiter
+htpasswd -c /etc/nginx/schildgenerator.htpasswd mitarbeiter
 ```
 
 Weitere Benutzer später ohne `-c` hinzufügen:
 
 ```bash
-sudo htpasswd /etc/nginx/schildgenerator.htpasswd zweiter-name
+htpasswd /etc/nginx/schildgenerator.htpasswd zweiter-name
 ```
 
 Konfiguration prüfen und laden:
 
 ```bash
-sudo nginx -t && sudo systemctl reload nginx
+nginx -t && systemctl reload nginx
 ```
 
 ## 8. HTTPS einrichten
 
 ```bash
-sudo apt install -y certbot python3-certbot-nginx
+apt install -y certbot python3-certbot-nginx
 ```
 
 ```bash
-sudo certbot --nginx -d schilder.deinedomain.de
+certbot --nginx -d schilder.deinedomain.de
 ```
 
 certbot fragt nach einer E-Mail und richtet die automatische Verlängerung selbst ein.
@@ -160,7 +160,7 @@ certbot fragt nach einer E-Mail und richtet die automatische Verlängerung selbs
 Falls die Firewall `ufw` aktiv ist:
 
 ```bash
-sudo ufw allow 'Nginx Full'
+ufw allow 'Nginx Full'
 ```
 
 Fertig: `https://schilder.deinedomain.de` öffnen und mit Benutzer und Passwort anmelden.
@@ -172,7 +172,7 @@ Fertig: `https://schilder.deinedomain.de` öffnen und mit Benutzer und Passwort 
 Wenn es eine neue Version im GitHub-Repo gibt:
 
 ```bash
-sudo /opt/schildgenerator/deploy/update.sh
+/opt/schildgenerator/deploy/update.sh
 ```
 
 ## Gut zu wissen
@@ -183,5 +183,5 @@ sudo /opt/schildgenerator/deploy/update.sh
 - **Logs ansehen:**
 
 ```bash
-sudo journalctl -u schildgenerator -f
+journalctl -u schildgenerator -f
 ```
