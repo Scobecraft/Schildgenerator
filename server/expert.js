@@ -1,0 +1,250 @@
+// Holt Produktdaten und den Marktpreis von expert.de – ausschließlich für den Markt Asbach.
+//
+// Ablauf (wie ein normaler Besucher im Browser):
+//  1. https://www.expert.de/markt/asbach öffnen  -> expert setzt den Markt "Asbach" (Cookie fmarktcookie)
+//  2. https://www.expert.de/suche?q=<EAN oder Artikelnummer> öffnen -> expert leitet direkt zum Produkt
+//  3. Den Preis, den die Seite für den Markt lädt, mitlesen und prüfen, dass er wirklich zu Asbach gehört
+//  4. Produktdaten (Warengruppe, Name, Web-Code, Eigenschaften, Herstellerlogo) aus den Seitendaten lesen
+
+const { chromium } = require('playwright');
+
+const STORE_URL = 'https://www.expert.de/markt/asbach';
+const STORE_ID = 'e_14756046'; // expert klein Asbach (von expert.de beim Öffnen der Marktseite gesetzt)
+const SEARCH_URL = 'https://www.expert.de/suche?q=';
+
+let browserPromise = null;
+let contextPromise = null;
+let queue = Promise.resolve();
+
+async function getContext() {
+  if (!browserPromise) {
+    browserPromise = chromium.launch().catch((e) => { browserPromise = null; throw e; });
+  }
+  if (!contextPromise) {
+    contextPromise = (async () => {
+      const browser = await browserPromise;
+      const ctx = await browser.newContext({ locale: 'de-DE', viewport: { width: 1280, height: 900 } });
+      // Bilder/Fonts/Media brauchen wir für die Datenabfrage nicht -> schneller
+      await ctx.route('**/*', (route) => {
+        const t = route.request().resourceType();
+        if (t === 'image' || t === 'media' || t === 'font') return route.abort();
+        return route.continue();
+      });
+      const page = await ctx.newPage();
+      await page.goto(STORE_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
+      await page.close();
+      return ctx;
+    })().catch((e) => { contextPromise = null; throw e; });
+  }
+  return contextPromise;
+}
+
+async function ensureStoreCookie(ctx) {
+  const cookies = await ctx.cookies('https://www.expert.de');
+  const c = cookies.find((x) => x.name === 'fmarktcookie');
+  if (!c || c.value !== STORE_ID) {
+    const page = await ctx.newPage();
+    try { await page.goto(STORE_URL, { waitUntil: 'domcontentloaded', timeout: 60000 }); }
+    finally { await page.close(); }
+    const again = (await ctx.cookies('https://www.expert.de')).find((x) => x.name === 'fmarktcookie');
+    if (!again || again.value !== STORE_ID) {
+      throw new Error('Markt Asbach konnte auf expert.de nicht ausgewählt werden.');
+    }
+  }
+}
+
+// Wird im Browser ausgeführt: liest die Nuxt-Seitendaten (devalue-Format) aus.
+function extractInPage() {
+  const el = document.getElementById('__NUXT_DATA__');
+  if (!el) return null;
+  const d = JSON.parse(el.textContent);
+  const cache = new Map();
+  const WRAP = new Set(['Reactive', 'ShallowReactive', 'Ref', 'ShallowRef', 'EmptyRef', 'EmptyShallowRef']);
+  function rev(i) {
+    if (cache.has(i)) return cache.get(i);
+    const v = d[i];
+    if (Array.isArray(v)) {
+      if (typeof v[0] === 'string' && WRAP.has(v[0])) { const r = v.length > 1 ? rev(v[1]) : null; cache.set(i, r); return r; }
+      if (typeof v[0] === 'string' && ['Set', 'Map', 'Date', 'null', 'undefined', 'NaN', 'BigInt'].includes(v[0])) { cache.set(i, null); return null; }
+      const out = []; cache.set(i, out);
+      for (const x of v) out.push(typeof x === 'number' ? rev(x) : x);
+      return out;
+    }
+    if (v && typeof v === 'object') {
+      const out = {}; cache.set(i, out);
+      for (const [k, x] of Object.entries(v)) out[k] = (typeof x === 'number' && x >= 0) ? rev(x) : x;
+      return out;
+    }
+    cache.set(i, v); return v;
+  }
+  const root = rev(0);
+  const data = (root && root.data) || {};
+  const key = Object.keys(data).find((k) => k.startsWith('articlepds:'));
+  if (!key) return { notProduct: true };
+  const pds = data[key];
+  const a = pds.article || {};
+  const brandKey = Object.keys(data).find((k) => k.startsWith('brand/id='));
+  const brandFull = brandKey ? data[brandKey] : null;
+  const logo = brandFull && brandFull.logo && typeof brandFull.logo === 'object' ? brandFull.logo : null;
+  const domLogo = [...document.querySelectorAll('img')].map((i) => i.getAttribute('src') || '')
+    .find((s) => /Markenlogo|brandlogo|marken/i.test(s)) || null;
+  const domPrice = (document.querySelector('.price') || {}).innerText || '';
+  const headline = (document.querySelector('h1') || {}).innerText || '';
+  return {
+    webcode: a.webcode,
+    ean: a.internationalArticleNumber,
+    mpn: a.manufacturerPartNumber,
+    productType: a.productType,
+    name: a.name,
+    shortName: a.shortName,
+    title: a.title,
+    headline: a.headline || headline,
+    descriptionList: a.descriptionList || [],
+    formerPriceState: a.formerPriceState || null,
+    slug: a.slug,
+    manufacturer: pds.manufacturer ? pds.manufacturer.name : null,
+    brandName: (brandFull && brandFull.name) || (pds.brand && pds.brand.name) || null,
+    brandLogo: logo ? (logo.originalUrl || logo.url || logo.cdnUrl || null) : null,
+    brandLogoRaw: logo,
+    domLogo,
+    domPrice: domPrice.replace(/\s+/g, ' ').trim(),
+  };
+}
+
+function findUrlsDeep(obj, out = [], depth = 0) {
+  if (!obj || depth > 4) return out;
+  if (typeof obj === 'string') { if (/^https?:\/\//.test(obj)) out.push(obj); return out; }
+  if (typeof obj === 'object') for (const v of Object.values(obj)) findUrlsDeep(v, out, depth + 1);
+  return out;
+}
+
+function originalCdnUrl(u) {
+  // https://cdn.expert.de/cdn-cgi/image/h=100/33/42/.../Markenlogo_X.png.png -> Original in voller Auflösung
+  if (!u) return u;
+  if (u.startsWith('//')) u = 'https:' + u;
+  if (u.startsWith('/')) u = 'https://cdn.expert.de' + u;
+  return u.replace(/\/cdn-cgi\/image\/[^/]+\//, '/');
+}
+
+async function lookupInternal(query) {
+  const q = String(query || '').trim();
+  if (!q) throw new Error('Bitte EAN oder Artikelnummer eingeben.');
+  const ctx = await getContext();
+  await ensureStoreCookie(ctx);
+  const page = await ctx.newPage();
+  let priceJson = null;
+  let priceUrl = null;
+  page.on('response', async (r) => {
+    if (r.url().includes('/api/pricepds')) {
+      try { priceJson = await r.json(); priceUrl = r.url(); } catch (_) { /* ignorieren */ }
+    }
+  });
+  try {
+    await page.goto(SEARCH_URL + encodeURIComponent(q), { waitUntil: 'domcontentloaded', timeout: 60000 });
+    let url = page.url();
+
+    // Kein direkter Treffer -> Suchergebnisliste. Nur bei genau einem Treffer weitermachen.
+    if (!/\/shop\/unsere-produkte\//.test(url)) {
+      await page.waitForTimeout(2500);
+      const links = await page.evaluate(() => [...new Set([...document.querySelectorAll('a[href*="/shop/unsere-produkte/"]')]
+        .map((a) => a.href.split('?')[0]).filter((h) => /\/\d{8,}-[^/]+\.html$/.test(h)))]);
+      if (links.length === 1) {
+        await page.goto(links[0], { waitUntil: 'domcontentloaded', timeout: 60000 });
+        url = page.url();
+      } else if (links.length === 0) {
+        throw new Error(`Kein Produkt für „${q}“ auf expert.de gefunden.`);
+      } else {
+        throw new Error(`„${q}“ ist nicht eindeutig (${links.length} Treffer auf expert.de). Bitte EAN oder Web-Code verwenden.`);
+      }
+    }
+
+    const info = await page.evaluate(extractInPage);
+    if (!info || info.notProduct) throw new Error(`Kein Produkt für „${q}“ auf expert.de gefunden.`);
+
+    // Auf den Marktpreis warten (wird von der Seite separat für den gewählten Markt geladen)
+    if (!priceJson) {
+      await page.waitForResponse((r) => r.url().includes('/api/pricepds'), { timeout: 25000 }).catch(() => {});
+      await page.waitForTimeout(300);
+    }
+    if (!priceJson) throw new Error('Preis für Markt Asbach konnte nicht geladen werden.');
+    if (priceJson.store !== STORE_ID || !String(priceUrl).includes('storeId=' + STORE_ID)) {
+      throw new Error('Der geladene Preis gehört nicht zum Markt Asbach – abgebrochen.');
+    }
+    const p = priceJson.price || {};
+    const promo = priceJson.promotionPrice || {};
+    const price = typeof promo.currentPrice === 'number' ? promo.currentPrice : p.bruttoPrice;
+    if (typeof price !== 'number' || !(price > 0)) throw new Error('Für dieses Produkt ist im Markt Asbach kein Preis hinterlegt.');
+
+    // Gegenprobe mit dem sichtbaren Preis auf der Seite
+    await page.waitForFunction(() => /\d/.test((document.querySelector('.price') || {}).innerText || ''), null, { timeout: 8000 }).catch(() => {});
+    const domPrice = await page.evaluate(() => ((document.querySelector('.price') || {}).innerText || '').replace(/\s+/g, ' ').trim());
+    const m = domPrice.match(/(\d{1,3}(?:\.\d{3})*|\d+)(?:,(\d{2}))?[.,]?-?/);
+    let domValue = null;
+    if (m) domValue = parseFloat(m[1].replace(/\./g, '') + '.' + (m[2] || '00'));
+    // Formate wie "27.-" oder "27.99"
+    const m2 = domPrice.match(/^(\d+)\.(\d{2}|-)/);
+    if (m2) domValue = parseFloat(m2[1] + '.' + (m2[2] === '-' ? '00' : m2[2]));
+    const warnings = [];
+    if (domValue !== null && Math.abs(domValue - price) > 0.005) {
+      warnings.push(`Preis-Abweichung: Seite zeigt ${domPrice.split(' ')[0]}, Marktdaten ${price.toFixed(2)} €. Bitte prüfen.`);
+    }
+
+    // Streichpreis / UVP, falls expert selbst einen anzeigt
+    let expertUvp = null;
+    const strike = await page.evaluate(() => {
+      const t = ((document.querySelector('.price') || {}).innerText || '').replace(/\s+/g, ' ');
+      const mm = t.match(/(?:UVP|statt|Unverbindliche Preisempfehlung)[^\d]{0,20}(\d+(?:[.,]\d{2})?)/i);
+      return mm ? mm[1] : null;
+    });
+    if (strike) expertUvp = parseFloat(strike.replace(',', '.'));
+
+    const canonical = url.split('?')[0];
+    let logo = originalCdnUrl(info.brandLogo || info.domLogo);
+    if (!logo && info.brandLogoRaw) {
+      logo = originalCdnUrl(findUrlsDeep(info.brandLogoRaw).find((u) => /\.(png|svg|jpe?g|webp)/i.test(u)) || null);
+    }
+
+    return {
+      query: q,
+      source: 'expert.de – Markt Asbach',
+      fetchedAt: new Date().toISOString(),
+      productUrl: canonical,
+      qrUrl: canonical + '?branch_id=' + STORE_ID,
+      webcode: info.webcode,
+      ean: info.ean,
+      mpn: info.mpn,
+      group: info.productType || '',
+      name: info.shortName || info.title || info.name || '',
+      fullName: info.headline || info.name || '',
+      bullets: (info.descriptionList || []).filter(Boolean),
+      manufacturer: info.manufacturer,
+      brand: info.brandName,
+      logoUrl: logo || null,
+      price,
+      priceInfo: {
+        storeId: priceJson.store,
+        storeStock: p.storeStock,
+        storeAvailability: p.storeAvailability,
+        shownOnPage: domPrice.split(' ')[0] || null,
+      },
+      expertUvp,
+      warnings,
+    };
+  } finally {
+    await page.close().catch(() => {});
+  }
+}
+
+// Anfragen nacheinander abarbeiten (schont expert.de und hält den Markt-Cookie stabil)
+function lookup(query) {
+  const run = queue.then(() => lookupInternal(query));
+  queue = run.catch(() => {});
+  return run;
+}
+
+async function getBrowser() {
+  if (!browserPromise) browserPromise = chromium.launch().catch((e) => { browserPromise = null; throw e; });
+  return browserPromise;
+}
+
+module.exports = { lookup, getBrowser, STORE_ID };

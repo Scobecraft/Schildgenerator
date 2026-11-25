@@ -1,0 +1,55 @@
+/* Schriften (lokal, damit Vorschau und PDF identisch sind) */
+@font-face { font-family: 'PT Text'; font-weight: 400; font-style: normal; src: url(/fonts/roboto-condensed-latin-400-normal.woff2) format('woff2'); }
+@font-face { font-family: 'PT Text'; font-weight: 700; font-style: normal; src: url(/fonts/roboto-condensed-latin-700-normal.woff2) format('woff2'); }
+@font-face { font-family: 'PT Text'; font-weight: 800; font-style: normal; src: url(/fonts/roboto-condensed-latin-800-normal.woff2) format('woff2'); }
+@font-face { font-family: 'PT Price'; font-weight: 100 900; font-stretch: 62% 125%; font-style: italic; src: url(/fonts/archivo-latin-standard-italic.woff2) format('woff2-variations'); }
+
+/* ---------------- expert A5 klassisch ---------------- */
+.pt {
+  position: relative;
+  overflow: hidden;
+  background: #fff;
+  color: #030303;
+  font-family: 'PT Text', 'Roboto Condensed', 'Arial Narrow', sans-serif;
+  box-sizing: border-box;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.pt *, .pt *::before, .pt *::after { box-sizing: border-box; }
+.pt-f { position: absolute; }
+
+.pt-expert-a5 .pt-bar { position: absolute; left: 1mm; right: 1mm; background: #f47a25; }
+.pt-expert-a5 .pt-bar-top { top: 1.9mm; height: 5.4mm; }
+.pt-expert-a5 .pt-bar-bottom { top: 197.6mm; height: 10.8mm; }
+
+/* expert-Logo: Schriftzug und Stern getrennt platziert wie im Original */
+.pt-expert-a5 .pt-expert-word { position: absolute; left: 2.2mm; top: 15.95mm; width: 51.07mm; height: 9.39mm; overflow: hidden; }
+.pt-expert-a5 .pt-expert-word img { display: block; width: 75.075mm; height: auto; margin-top: -6.42mm; }
+.pt-expert-a5 .pt-expert-star { position: absolute; left: 57.5mm; top: 10.5mm; width: 18.4mm; height: 18.4mm; overflow: hidden; }
+.pt-expert-a5 .pt-expert-star img { display: block; width: 70.65mm; height: auto; margin-left: -51.68mm; margin-top: -0.466mm; }
+
+.pt-expert-a5 .pt-qr img { display: block; width: 100%; height: 100%; }
+.pt-expert-a5 .pt-logo { display: flex; align-items: center; justify-content: flex-start; }
+.pt-expert-a5 .pt-logo img { display: block; width: 100%; height: 100%; object-fit: contain; object-position: left center; }
+.pt-expert-a5 .pt-ph { font-size: 4mm; color: #bbb; border: 0.3mm dashed #ccc; padding: 2mm 4mm; }
+
+.pt-expert-a5 .pt-group,
+.pt-expert-a5 .pt-name { font-weight: 700; font-size: 7.15mm; line-height: 1; white-space: nowrap; letter-spacing: -0.01em; }
+.pt-expert-a5 .pt-group span, .pt-expert-a5 .pt-name span { display: inline-block; }
+.pt-expert-a5 .pt-artnr { font-size: 2.65mm; line-height: 1; white-space: nowrap; }
+
+.pt-expert-a5 .pt-bullets { font-size: 4.92mm; line-height: 1.16; overflow: hidden; letter-spacing: 0.012em; }
+.pt-expert-a5 .pt-bullets ul { list-style: none; margin: 0; padding: 0 0 0 4.1mm; }
+.pt-expert-a5 .pt-bullets li { position: relative; }
+.pt-expert-a5 .pt-bullets li::before { content: '•'; position: absolute; left: -4.1mm; top: 0; font-size: 1.1em; line-height: 1.05; }
+
+.pt-expert-a5 .pt-uvp { display: flex; flex-direction: column; color: #fff; }
+.pt-expert-a5 .pt-uvp svg { display: block; width: 100%; height: 100%; overflow: visible; }
+
+.pt-expert-a5 .pt-price svg { display: block; }
+
+/* Editor-Hilfen (nicht im Druck) */
+.pt-editing .pt-f { cursor: move; outline: 0.25mm dashed transparent; outline-offset: 0.4mm; }
+.pt-editing .pt-f:hover { outline-color: rgba(247, 122, 37, .7); }
+.pt-editing .pt-f.is-selected { outline: 0.35mm solid #f47a25; }
+.pt-expert-a5 .pt-bullets .nb { white-space: nowrap; }

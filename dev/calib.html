@@ -1,0 +1,11 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="/css/tag.css">
+<style>body{margin:0;background:#fff}#wrap{position:relative;width:148mm;height:210mm}
+#o{position:absolute;inset:0;width:148mm;height:210mm;opacity:var(--op,0.5);z-index:5;mix-blend-mode:multiply}</style></head><body>
+<div id="wrap"><div id="t"></div><img id="o" src="/vorlage-original.png"></div>
+<script src="/js/templates.js"></script>
+<script>
+const tag={template:'expert-a5',data:{group:'Gaming Maus',name:'LOG G502 HERO',artnr:'17620260134',bullets:['11 programmierbare Tasten und ultraschnelles Scrollen','Fünf 3,6-g-Gewichte zum Anpassen von Gewicht und Balance','LIGHTSYNC Technologie für vollständig anpassbare RGB-Beleuchtung','Promptes und klares Klickgefühl mit sofortiger Rückmeldung'],price:27,uvp:69.99,qrUrl:'https://www.expert.de/x',logoUrl:'https://cdn.expert.de/33/42/c5/c4f9a549f890b324c462eb28307a9e6f03/Markenlogo_LOGITECH_G.png.png'}};
+document.getElementById('t').innerHTML=PT.Templates['expert-a5'].render(tag);
+const op=new URLSearchParams(location.search).get('op'); if(op!==null) document.getElementById('o').style.opacity=op;
+PT.fitAll().then(()=>{document.body.dataset.ready=1; const g=document.querySelector('.pt-price svg g g'); window.bb=g&&g.getBBox();});
+</script></body></html>
