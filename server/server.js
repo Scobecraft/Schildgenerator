@@ -16,6 +16,7 @@ const { lookup, getBrowser, STORE_ID } = require('./expert');
 const { findUvp, isConfigured } = require('./uvp');
 
 const PORT = Number(process.env.PORT) || 3000;
+const HOST = process.env.HOST || '0.0.0.0'; // auf dem Server: 127.0.0.1 (nur über nginx erreichbar)
 const app = express();
 app.use(express.json({ limit: '60mb' }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
@@ -184,8 +185,8 @@ app.post('/api/pdf', async (req, res) => {
   }
 });
 
-const httpServer = app.listen(PORT, () => {
-  console.log(`Preisschild-Studio läuft auf http://localhost:${PORT}`);
+const httpServer = app.listen(PORT, HOST, () => {
+  console.log(`Schildgenerator läuft auf http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`);
   console.log(`UVP-Recherche: ${isConfigured() ? 'aktiv' : 'aus (ANTHROPIC_API_KEY setzen, um sie zu aktivieren)'}`);
 });
 httpServer.on('error', (e) => {

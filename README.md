@@ -3,7 +3,11 @@
 Webseite zum Erstellen von Preisschildern für **expert Asbach**.
 EAN oder Artikelnummer eingeben → Preis, Warengruppe, Artikelname, Eigenschaften, Herstellerlogo und QR-Code kommen automatisch von expert.de → anpassen → als PDF drucken.
 
-## Starten (zum Testen)
+## Auf einem Server hosten
+
+Schritt-für-Schritt-Anleitung für Ubuntu/Debian mit nginx, HTTPS und Passwortschutz: [deploy/ANLEITUNG-SERVER.md](deploy/ANLEITUNG-SERVER.md)
+
+## Lokal starten (zum Ausprobieren)
 
 Voraussetzung: **Node.js** (LTS-Version von https://nodejs.org) ist installiert.
 
