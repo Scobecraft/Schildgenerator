@@ -720,6 +720,17 @@ ${pages.map((p) => sheetHtml(p, opt)).join('\n')}
     save(); renderStage(); renderEditor(); renderLogoLib();
   });
 
+  // ---------------------------------------------------------------- Dunkelmodus
+  function setTheme(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    try { localStorage.setItem('schildgenerator.theme', t); } catch (_) { /* egal */ }
+    $('#btnTheme').title = t === 'dark' ? 'Hellen Modus einschalten' : 'Dunkelmodus einschalten';
+  }
+  $('#btnTheme').addEventListener('click', () => {
+    setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
+  $('#btnTheme').title = document.documentElement.getAttribute('data-theme') === 'dark' ? 'Hellen Modus einschalten' : 'Dunkelmodus einschalten';
+
   // ---------------------------------------------------------------- Start
   function renderAll() { renderList(); renderStage(); renderEditor(); }
 
