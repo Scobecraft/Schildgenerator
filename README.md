@@ -58,7 +58,13 @@ Pro Schild umschaltbar zwischen **Original** (Standard) und **Hochskaliert**. Ho
 
 ## Vorlagen
 
-Vorlagen liegen in `public/js/templates.js` (Aufbau) und `public/css/tag.css` (Aussehen). Aktuell: **expert A5 – Klassisch**. Weitere Formate und Designs werden dort ergänzt und sind dann in der Auswahl verfügbar.
+Vorlagen liegen in `public/js/templates.js` (Aufbau) und `public/css/tag.css` (Aussehen). Aktuell: **expert A5 – Klassisch**.
+
+- **Auswahl mit Vorschau:** „Vorlage für neue Schilder“ öffnet alle Vorlagen als Vorschaubild (live gezeichnet, also immer aktuell).
+- **Vorlage wechseln:** im Editor beim ausgewählten Schild. Die Daten bleiben, verschobene Felder werden zurückgesetzt.
+- **+ Weitere Vorlage:** legt denselben Artikel zusätzlich in einer anderen Vorlage/Größe an. Beim Drucken werden gemischte Größen automatisch zusammen angeordnet.
+
+Eine neue Vorlage braucht: `id`, `name`, `short` (Kürzel für die Liste, z. B. „A6“), `format`, `width`/`height` in mm, `fields` (verschiebbare Felder) und `render(tag)`. Optional: `description` und `sample` (eigene Beispieldaten für die Vorschau).
 
 Schriften (frei, dem Original am nächsten): Roboto Condensed für Texte, Archivo Black Italic schmal für Preis und UVP-Box.
 

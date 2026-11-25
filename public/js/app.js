@@ -207,7 +207,7 @@
       <li class="tag-item ${t.id === state.selectedId ? 'active' : ''}" data-id="${t.id}">
         <div class="tag-title">${statusDot(t)}<span>${esc(t.data.name || t.query || 'Neues Schild')}</span></div>
         <div class="tag-price">${t.status === 'loading' ? '<span class="spinner"></span>' : euro(t.data.price)}</div>
-        <div class="tag-sub">${esc([t.data.group, t.data.artnr && 'Art.Nr. ' + t.data.artnr].filter(Boolean).join(' · ') || (t.status === 'loading' ? 'Wird von expert.de abgerufen…' : tpl(t).name))}</div>
+        <div class="tag-sub"><span class="tpl-pill" title="${esc(tpl(t).name)}">${esc(tpl(t).short || tpl(t).name)}</span>${esc([t.data.group, t.data.artnr && 'Art.Nr. ' + t.data.artnr].filter(Boolean).join(' · ') || (t.status === 'loading' ? 'Wird von expert.de abgerufen…' : tpl(t).name))}</div>
         <div class="tag-actions">
           <span class="qty" title="Menge">
             <button type="button" data-act="minus" aria-label="weniger">−</button>
@@ -441,7 +441,7 @@
     const d = t.data;
     const m = t.meta || {};
     const priceChanged = m.fetchedPrice != null && d.price != null && Math.abs(d.price - m.fetchedPrice) > 0.004;
-    const tplOpts = Object.values(PT.Templates).map((x) => `<option value="${x.id}" ${x.id === t.template ? 'selected' : ''}>${esc(x.name)} (${esc(x.format)})</option>`).join('');
+    const T = tpl(t);
     ed.innerHTML = `
       ${t.status === 'error' ? `<div class="err-box"><b>Abruf fehlgeschlagen:</b> ${esc(t.error)}</div>` : ''}
       ${(t.warnings || []).map((w) => `<div class="warn-box">${esc(w)}</div>`).join('')}
@@ -455,7 +455,14 @@
       </section>
       <section class="ed-section">
         <h3>Inhalt</h3>
-        <label class="ed-field"><span>Vorlage</span><select data-k="template">${tplOpts}</select></label>
+        <div class="ed-field"><span>Vorlage</span>
+          <div class="tpl-current"><div class="tpl-current-thumb" id="edTplThumb"></div>
+            <div><b>${esc(T.name)}</b><div class="muted" style="font-size:12px">${esc(T.format)} · ${T.width} × ${T.height} mm</div></div></div>
+          <div class="btn-row">
+            <button class="btn btn-sm" type="button" data-do="tplChange">Vorlage wechseln</button>
+            <button class="btn btn-sm" type="button" data-do="tplAdd" title="Denselben Artikel zusätzlich in einer anderen Vorlage/Größe anlegen">+ Weitere Vorlage</button>
+          </div>
+        </div>
         <label class="ed-field"><span>Warengruppe</span><input type="text" data-k="group" value="${esc(d.group)}"></label>
         <label class="ed-field"><span>Artikelname</span><input type="text" data-k="name" value="${esc(d.name)}"></label>
         <label class="ed-field"><span>Artikelnummer</span><input type="text" data-k="artnr" value="${esc(d.artnr)}"></label>
@@ -473,6 +480,7 @@
         ${logoBlock(t)}
         <label class="ed-field"><span>QR-Code führt zu</span><input type="url" data-k="qrUrl" value="${esc(d.qrUrl)}" placeholder="https://www.expert.de/…"></label>
       </section>`;
+    PT.renderThumb($('#edTplThumb'), T.id, 52, 72, t.data);
   }
 
   // Eingaben im Editor
@@ -482,8 +490,7 @@
     if (!k || !t) return;
     const v = e.target.value;
     if (k === 'query') { t.query = v.trim(); save(); return; }
-    if (k === 'template') { t.template = v; state.template = v; }
-    else if (k === 'bullets') t.data.bullets = v.split('\n');
+    if (k === 'bullets') t.data.bullets = v.split('\n');
     else if (k === 'price') t.data.price = v === '' ? null : Math.round(parseFloat(v.replace(',', '.')) * 100) / 100;
     else if (k === 'uvp') {
       t.data.uvp = v === '' ? null : Math.round(parseFloat(v.replace(',', '.')) * 100) / 100;
@@ -495,7 +502,6 @@
     renderList();
     renderStageDebounced();
     if (k === 'price' || k === 'uvp') updateSavingsField(t);
-    if (k === 'template') renderStage();
   });
   $('#editor').addEventListener('change', (e) => {
     const k = e.target.dataset.k;
@@ -519,6 +525,10 @@
     } else if (a === 'uvpReset') {
       t.meta.uvp = {};
       enqueueFetch(t); renderEditor();
+    } else if (a === 'tplChange') {
+      openTplPicker('change');
+    } else if (a === 'tplAdd') {
+      openTplPicker('add');
     } else if (a === 'logoMode') {
       t.data.logoUpscale = b.dataset.mode === 'up';
       save(); renderStage(); renderEditor();
@@ -576,7 +586,6 @@
   function addFromInput() {
     const items = parseCodes($('#inputCodes').value);
     if (!items.length) { toast('Bitte mindestens eine EAN oder Artikelnummer eingeben.', 'err'); return; }
-    state.template = $('#inputTemplate').value;
     let first = null;
     for (const it of items) {
       const t = newTag(it.code, it.qty);
@@ -730,6 +739,73 @@ ${pages.map((p) => sheetHtml(p, opt)).join('\n')}
       btn.disabled = false;
       btn.textContent = 'PDF herunterladen';
     }
+  });
+
+  // ---------------------------------------------------------------- Vorlagen-Auswahl
+  let tplMode = 'default';
+
+  function renderTplChip() {
+    const T = PT.Templates[state.template] || PT.Templates[DEFAULT_TEMPLATE];
+    $('#tplChipName').textContent = T.name;
+    PT.renderThumb($('#tplChipThumb'), T.id, 34, 46);
+  }
+
+  function openTplPicker(mode) {
+    tplMode = mode;
+    const t = selected();
+    const current = mode === 'default' ? state.template : t && t.template;
+    $('#tplTitle').textContent = mode === 'change' ? 'Vorlage wechseln' : mode === 'add' ? 'Weitere Vorlage für diesen Artikel' : 'Vorlage für neue Schilder';
+    $('#tplHint').textContent = mode === 'change'
+      ? 'Das ausgewählte Schild bekommt die neue Vorlage. Die Daten bleiben, verschobene Felder werden zurückgesetzt.'
+      : mode === 'add'
+        ? 'Der Artikel wird zusätzlich als eigenes Schild in der gewählten Vorlage angelegt – z. B. für eine andere Größe.'
+        : 'Diese Vorlage bekommen alle Artikel, die du ab jetzt abrufst. Bei einzelnen Schildern kannst du sie später noch wechseln.';
+    const list = Object.values(PT.Templates);
+    $('#tplGrid').innerHTML = list.map((T) => `
+      <li><button type="button" class="tpl-card ${T.id === current ? 'current' : ''}" data-tpl="${esc(T.id)}">
+        <div class="tpl-card-thumb"></div>
+        <div class="tpl-card-name">${esc(T.name)} ${T.id === current ? '<span class="pill pill-orange">aktuell</span>' : ''}</div>
+        <div class="tpl-card-meta">${esc(T.format)} · ${T.width} × ${T.height} mm</div>
+        ${T.description ? `<div class="tpl-card-desc">${esc(T.description)}</div>` : ''}
+      </button></li>`).join('');
+    // Vorschau: beim Wechseln/Hinzufügen mit den Daten des Artikels, sonst mit Beispieldaten
+    const data = mode === 'default' || !t ? null : t.data;
+    document.querySelectorAll('#tplGrid .tpl-card').forEach((card) => PT.renderThumb(card.querySelector('.tpl-card-thumb'), card.dataset.tpl, 170, 230, data));
+    $('#tplDialog').showModal();
+  }
+
+  $('#btnPickTemplate').addEventListener('click', () => openTplPicker('default'));
+  $('#tplGrid').addEventListener('click', (e) => {
+    const card = e.target.closest('[data-tpl]');
+    if (!card) return;
+    const id = card.dataset.tpl;
+    const T = PT.Templates[id];
+    const t = selected();
+    if (tplMode === 'default') {
+      state.template = id;
+      renderTplChip();
+      save();
+    } else if (tplMode === 'change' && t) {
+      if (t.template !== id) {
+        t.template = id;
+        t.layout = {};
+        selectedField = null;
+        save(); renderAll();
+        toast(`Vorlage gewechselt zu „${T.name}“.`, 'ok');
+      }
+    } else if (tplMode === 'add' && t) {
+      const c = JSON.parse(JSON.stringify(t));
+      c.id = uid();
+      c.template = id;
+      c.layout = {};
+      c.qty = 1;
+      state.tags.splice(state.tags.indexOf(t) + 1, 0, c);
+      state.selectedId = c.id;
+      selectedField = null;
+      save(); renderAll();
+      toast(`„${c.data.name || c.query}“ zusätzlich als „${T.name}“ angelegt.`, 'ok');
+    }
+    $('#tplDialog').close();
   });
 
   // ---------------------------------------------------------------- Sets
@@ -891,8 +967,8 @@ ${pages.map((p) => sheetHtml(p, opt)).join('\n')}
   // ---------------------------------------------------------------- Start
   function renderAll() { renderList(); renderStage(); renderEditor(); renderSetBar(); }
 
-  $('#inputTemplate').innerHTML = Object.values(PT.Templates).map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join('');
-  $('#inputTemplate').value = state.template || DEFAULT_TEMPLATE;
+  if (!PT.Templates[state.template]) state.template = DEFAULT_TEMPLATE;
+  renderTplChip();
 
 
   if (legacyTags.length) {

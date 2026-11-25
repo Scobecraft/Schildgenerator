@@ -39,7 +39,9 @@
   Templates['expert-a5'] = {
     id: 'expert-a5',
     name: 'expert A5 – Klassisch',
+    short: 'A5',
     format: 'A5 Hochformat',
+    description: 'Das Standard-Schild: Logo, Warengruppe, Name, Eigenschaften, UVP-Box und großer Preis.',
     width: 148,
     height: 210,
     // Verschiebbare Felder (Standardposition in mm)
@@ -271,6 +273,38 @@
     root.querySelectorAll('.pt').forEach(fitTag);
   }
 
-  window.PT = { Templates, fitTag, fitAll, savingsPercent, fmtUvp, esc, logoSrcFor };
+  /* ------------------------------------------------------------------ */
+  /* Vorschaubild einer Vorlage (live gerendert mit Beispieldaten)       */
+  /* ------------------------------------------------------------------ */
+  const SAMPLE = {
+    group: 'Gaming Maus',
+    name: 'LOG G502 HERO',
+    artnr: '17620260134',
+    bullets: [
+      '11 programmierbare Tasten und ultraschnelles Scrollen',
+      'Fünf 3,6-g-Gewichte zum Anpassen von Gewicht und Balance',
+      'LIGHTSYNC Technologie für vollständig anpassbare RGB-Beleuchtung',
+      'Promptes und klares Klickgefühl mit sofortiger Rückmeldung',
+    ],
+    price: 27,
+    uvp: 69.99,
+    showUvp: true,
+    qrUrl: 'https://www.expert.de/',
+    logoUrl: 'https://cdn.expert.de/33/42/c5/c4f9a549f890b324c462eb28307a9e6f03/Markenlogo_LOGITECH_G.png.png',
+  };
+
+  // Zeichnet die Vorlage verkleinert in "box" (maxW x maxH Pixel). Gibt ein Promise zurück.
+  function renderThumb(box, templateId, maxW, maxH, data) {
+    const T = Templates[templateId];
+    if (!T) { box.innerHTML = ''; return Promise.resolve(); }
+    const MMPX = 96 / 25.4;
+    const s = Math.min(maxW / (T.width * MMPX), maxH / (T.height * MMPX));
+    const tag = { template: T.id, data: { ...SAMPLE, ...(T.sample || {}), ...(data || {}) }, layout: {} };
+    box.innerHTML = `<div class="pt-thumb" style="width:${(T.width * MMPX * s).toFixed(1)}px;height:${(T.height * MMPX * s).toFixed(1)}px">
+      <div style="transform:scale(${s});transform-origin:0 0;width:${T.width}mm;height:${T.height}mm">${T.render(tag)}</div></div>`;
+    return fitAll(box);
+  }
+
+  window.PT = { Templates, fitTag, fitAll, savingsPercent, fmtUvp, esc, logoSrcFor, renderThumb };
   window.__fitAll = () => fitAll(document);
 })();

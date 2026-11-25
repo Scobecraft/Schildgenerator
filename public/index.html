@@ -75,10 +75,12 @@
       <section class="card add-card">
         <h2>Artikel hinzufügen</h2>
         <textarea id="inputCodes" rows="4" spellcheck="false" placeholder="EAN oder Artikelnummer – eine pro Zeile&#10;Menge optional, z. B.  5099206080263 x3"></textarea>
-        <div class="row">
-          <select id="inputTemplate" title="Vorlage"></select>
-          <button class="btn btn-primary" id="btnFetch">Abrufen</button>
-        </div>
+        <button type="button" class="tpl-chip" id="btnPickTemplate" title="Vorlage für neue Schilder wählen">
+          <span class="tpl-chip-thumb" id="tplChipThumb"></span>
+          <span class="tpl-chip-text"><small>Vorlage für neue Schilder</small><b id="tplChipName">–</b></span>
+          <span class="tpl-chip-change">ändern</span>
+        </button>
+        <button class="btn btn-primary btn-block" id="btnFetch">Abrufen</button>
         <button class="link" id="btnEmpty">+ Leeres Schild ohne Abruf</button>
       </section>
 
@@ -150,6 +152,18 @@
         <button class="btn" value="cancel">Abbrechen</button>
         <button class="btn btn-primary" id="btnPdf" type="button">PDF herunterladen</button>
       </div>
+    </form>
+  </dialog>
+
+  <!-- Vorlagen-Auswahl -->
+  <dialog id="tplDialog" class="modal">
+    <form method="dialog" class="modal-inner">
+      <div class="modal-head">
+        <h2 id="tplTitle">Vorlage wählen</h2>
+        <button class="icon-btn" value="cancel" aria-label="Schließen">✕</button>
+      </div>
+      <p class="muted" id="tplHint" style="margin:0"></p>
+      <ul class="tpl-grid" id="tplGrid"></ul>
     </form>
   </dialog>
 
