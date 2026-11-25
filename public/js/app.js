@@ -923,12 +923,13 @@ ${pages.map((p) => sheetHtml(p, opt)).join('\n')}
 
   // ---------------------------------------------------------------- Statusanzeige
   const CIRC = 2 * Math.PI * 15.5;
+  // Binäre Einheiten wie in Proxmox (MiB, GiB)
   const fmtBytes = (b) => {
     if (!(b >= 0)) return '–';
-    const u = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const u = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
     let i = 0;
     while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
-    return (b >= 10 || i === 0 ? Math.round(b) : b.toFixed(1)).toString().replace('.', ',') + ' ' + u[i];
+    return b.toFixed(i === 0 ? 0 : 2).replace('.', ',') + ' ' + u[i];
   };
   function setGauge(k, percent, title) {
     const g = $(`#sysmon .gauge[data-k="${k}"]`);
@@ -945,8 +946,8 @@ ${pages.map((p) => sheetHtml(p, opt)).join('\n')}
     try {
       const s = await api('/api/system');
       setGauge('cpu', s.cpu.percent, `CPU: ${s.cpu.percent} % (${String(s.cpu.cores).replace('.', ',')} Kerne)`);
-      setGauge('ram', s.ram.percent, `Arbeitsspeicher: ${fmtBytes(s.ram.used)} von ${fmtBytes(s.ram.total)} belegt`);
-      if (s.disk) setGauge('disk', s.disk.percent, `Speicherplatz: ${fmtBytes(s.disk.used)} von ${fmtBytes(s.disk.total)} belegt`);
+      setGauge('ram', s.ram.percent, `Arbeitsspeicher: ${fmtBytes(s.ram.used)} von ${fmtBytes(s.ram.total)} belegt (${(s.ram.used / s.ram.total * 100).toFixed(2).replace('.', ',')} %)`);
+      if (s.disk) setGauge('disk', s.disk.percent, `Speicherplatz: ${fmtBytes(s.disk.used)} von ${fmtBytes(s.disk.total)} belegt (${(s.disk.used / s.disk.total * 100).toFixed(2).replace('.', ',')} %)`);
     } catch (_) { /* Server kurz nicht erreichbar */ }
   }
   pollSystem();

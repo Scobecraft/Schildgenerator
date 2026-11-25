@@ -10,6 +10,8 @@ services:
         required: false
     volumes:
       - ./data:/app/data
+      # Für die Statusanzeige: RAM des Rechners/LXC, in dem Docker läuft (nur lesend)
+      - /proc/meminfo:/host/proc/meminfo:ro
     # Chromium braucht etwas gemeinsamen Speicher und einen sauberen Init-Prozess
     init: true
     shm_size: "1gb"

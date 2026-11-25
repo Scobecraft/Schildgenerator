@@ -40,7 +40,22 @@ function cpuUsageUs() {
   return t * 1000; // ms -> µs
 }
 
+// Speicher-Übersicht des Rechners/Containers, in dem Docker läuft (per docker-compose hineingereicht).
+// In einem Proxmox-LXC zeigt sie die Werte des LXC (z. B. 5 GiB), nicht die des ganzen Proxmox-Servers.
+const HOST_MEMINFO = '/host/proc/meminfo';
+function hostMemory() {
+  const txt = read(HOST_MEMINFO);
+  if (!txt) return null;
+  const kb = (k) => { const m = new RegExp('^' + k + ':\\s+(\\d+)', 'm').exec(txt); return m ? Number(m[1]) * 1024 : null; };
+  const total = kb('MemTotal');
+  const avail = kb('MemAvailable');
+  if (!total || avail == null) return null;
+  return { used: Math.max(0, total - avail), total };
+}
+
 function memory() {
+  const host = hostMemory();
+  if (host) return host;
   const hostTotal = os.totalmem();
   let used = null, limit = null;
   if (CG2) {
@@ -63,9 +78,9 @@ function disk() {
   try {
     const dir = fs.existsSync(DATA_DIR) ? DATA_DIR : __dirname;
     const s = fs.statfsSync(dir);
+    const total = s.blocks * s.bsize;
     const used = (s.blocks - s.bfree) * s.bsize;
-    const avail = s.bavail * s.bsize;
-    return { used, total: used + avail }; // wie "df": belegt / (belegt + frei verfügbar)
+    return { used, total }; // wie Proxmox: belegt / Gesamtgröße
   } catch (_) {
     return null;
   }
@@ -87,7 +102,7 @@ function snapshot() {
   const d = disk();
   return {
     cpu: { percent: Math.round(cpuPercent), cores: Math.round(cpuLimit() * 10) / 10 },
-    ram: { percent: Math.round((mem.used / mem.total) * 100), used: mem.used, total: mem.total },
+    ram: { percent: Math.round((mem.used / mem.total) * 100), used: mem.used, total: mem.total, scope: hostMemory() ? 'host' : 'container' },
     disk: d ? { percent: Math.round((d.used / d.total) * 100), used: d.used, total: d.total } : null,
   };
 }
