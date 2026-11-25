@@ -1,39 +1,51 @@
-# Schildgenerator (Preisschild-Studio)
+# Schildgenerator
 
 Webseite zum Erstellen von Preisschildern für **expert Asbach**.
-EAN oder Artikelnummer eingeben → Preis, Warengruppe, Artikelname, Eigenschaften und Herstellerlogo werden automatisch von expert.de geholt → Schilder als PDF drucken.
+EAN oder Artikelnummer eingeben → Preis, Warengruppe, Artikelname, Eigenschaften, Herstellerlogo und QR-Code kommen automatisch von expert.de → anpassen → als PDF drucken.
 
-> **Stand: in Arbeit.** Fertig sind der Datenabruf von expert.de, die UVP-Recherche und die A5-Vorlage.
-> Noch nicht fertig sind die Bedienoberfläche (Eingabe, Liste, Editor mit Verschieben), die Logo-Bibliothek und die automatische Anordnung mehrerer Schilder auf einem Blatt.
+## Starten (zum Testen)
 
-## Was schon funktioniert
+Voraussetzung: **Node.js** (LTS-Version von https://nodejs.org) ist installiert.
 
-| Teil | Datei | Beschreibung |
-|---|---|---|
-| expert.de-Abruf | `server/expert.js` | Öffnet `expert.de/markt/asbach` (setzt den Markt), sucht die EAN/Artikelnummer und liest den Preis, den expert.de für den Markt Asbach lädt. Bricht ab, wenn der Preis nicht zur Markt-ID `e_14756046` (Asbach) gehört, und gleicht ihn mit dem auf der Seite angezeigten Preis ab. |
-| UVP-Recherche | `server/uvp.js` | Sucht die ursprüngliche Hersteller-UVP per Claude mit Websuche (bevorzugt Herstellerseiten und Fachpresse) und liefert die Quellen mit. Braucht `ANTHROPIC_API_KEY`. Ohne Key wird die UVP von Hand eingetragen. |
-| A5-Vorlage | `public/js/templates.js`, `public/css/tag.css` | Nachbau des Beispielschilds, Maße in mm aus der Vorlage übernommen. Ersparnis in % = (UVP − Preis) / UVP, abgerundet. Preis mit weißer Kontur und Schatten wie im Original. |
-| Server | `server/server.js` | API: `/api/lookup?q=`, `/api/uvp`, `/api/qr?text=`, `/api/img?url=` (Logo immer als PNG, Ränder abgeschnitten), `/api/pdf` (HTML → PDF über Chromium). |
+- **Windows:** Doppelklick auf `Start-Windows.bat`
+- **Mac:** Rechtsklick auf `Start-Mac.command` → Öffnen
 
-## Schriften
+Beim ersten Start werden die nötigen Programme installiert (einige Minuten, Internet nötig). Danach öffnet sich die Seite im Browser unter http://localhost:3000. Das Fenster mit dem Server offen lassen, solange die Seite benutzt wird.
 
-Freie Schriften, die dem Original am nächsten kommen. Sie liegen in `public/fonts/`, damit Vorschau und PDF gleich aussehen.
+### Automatische UVP-Suche (optional)
 
-- Warengruppe, Artikelname, Eigenschaften: **Roboto Condensed** (statt Helvetica Condensed)
-- Preis und UVP-Box: **Archivo**, Black Italic, schmal (Breitenachse 62–74 %)
+Die Datei `.env.example` als `.env` kopieren und einen Anthropic-API-Key eintragen (`ANTHROPIC_API_KEY=...`). Danach neu starten. Ohne Key wird die UVP von Hand eingetragen, alles andere funktioniert.
 
-## Starten
+## Bedienung
 
-```bash
-npm run setup
-```
+1. Links EAN oder Artikelnummern eingeben (eine pro Zeile, Menge z. B. `5099206080263 x3`) → **Abrufen**.
+2. Schild in der Liste anklicken → Vorschau in der Mitte, Daten rechts ändern.
+3. Felder in der Vorschau anklicken und mit der Maus verschieben (oder Pfeiltasten). Größe über den Regler.
+4. **Drucken** → Papier und Ränder wählen → **PDF herunterladen**. Die Schilder werden automatisch platzsparend angeordnet (z. B. 2 × A5 auf A4 quer).
 
-```bash
-ANTHROPIC_API_KEY=sk-ant-... npm start
-```
+Die Liste bleibt im Browser gespeichert.
 
-Danach http://localhost:3000 öffnen. Ohne `ANTHROPIC_API_KEY` läuft alles außer der automatischen UVP-Suche.
+## Woher die Daten kommen
 
-## Entwicklung
+| Angabe | Quelle |
+|---|---|
+| Preis | Nur expert.de, Markt Asbach. Das Tool wählt den Markt über `expert.de/markt/asbach`, prüft die Markt-ID (`e_14756046`) und vergleicht mit dem angezeigten Preis. Sonst Abbruch mit Fehlermeldung. |
+| Warengruppe, Name, Art.Nr., Eigenschaften | expert.de-Produktseite |
+| Herstellerlogo | Logo-Bibliothek (eigene hochauflösende PNGs) oder sonst das Logo von expert.de (klein, für Druck eher unscharf) |
+| UVP | Websuche (Herstellerseiten, Fachpresse), mit Quellen. Immer als „bitte prüfen“ markiert, bis bestätigt. |
+| Ersparnis | (UVP − Preis) / UVP, abgerundet |
+| QR-Code | expert.de-Produktseite mit Markt Asbach |
 
-`dev/calib.html` legt das gerenderte Schild halbtransparent über das Original (`dev/vorlage-original.png`), um Positionen abzugleichen. Zum Benutzen beide Dateien nach `public/` kopieren (dann `/calib.html` aufrufen).
+## Vorlagen
+
+Vorlagen liegen in `public/js/templates.js` (Aufbau) und `public/css/tag.css` (Aussehen). Aktuell: **expert A5 – Klassisch**. Weitere Formate und Designs werden dort ergänzt und sind dann in der Auswahl verfügbar.
+
+Schriften (frei, dem Original am nächsten): Roboto Condensed für Texte, Archivo Black Italic schmal für Preis und UVP-Box.
+
+## Technik
+
+- `server/expert.js` – Abruf von expert.de über einen unsichtbaren Browser (Playwright/Chromium)
+- `server/uvp.js` – UVP-Recherche über Claude mit Websuche
+- `server/server.js` – Webserver, PDF-Erstellung, Logos, QR-Codes
+- `public/` – die Webseite
+- `dev/` – Hilfsdateien zum Abgleich mit der Original-Vorlage

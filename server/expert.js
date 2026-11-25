@@ -132,12 +132,17 @@ async function lookupInternal(query) {
   const ctx = await getContext();
   await ensureStoreCookie(ctx);
   const page = await ctx.newPage();
-  let priceJson = null;
-  let priceUrl = null;
+  // Alle Preis-Antworten sammeln (die Seite lädt evtl. auch Preise für Zubehör/Bundles)
+  const prices = [];
   page.on('response', async (r) => {
     if (r.url().includes('/api/pricepds')) {
-      try { priceJson = await r.json(); priceUrl = r.url(); } catch (_) { /* ignorieren */ }
+      try { prices.push({ url: r.url(), json: await r.json() }); } catch (_) { /* ignorieren */ }
     }
+  });
+  const priceFor = (webcode) => prices.find((x) => {
+    const u = new URL(x.url);
+    return u.searchParams.get('webcode') === webcode && u.searchParams.get('storeId') === STORE_ID &&
+      x.json && x.json.store === STORE_ID && String(x.json.webcode) === webcode;
   });
   try {
     await page.goto(SEARCH_URL + encodeURIComponent(q), { waitUntil: 'domcontentloaded', timeout: 60000 });
@@ -162,14 +167,17 @@ async function lookupInternal(query) {
     if (!info || info.notProduct) throw new Error(`Kein Produkt für „${q}“ auf expert.de gefunden.`);
 
     // Auf den Marktpreis warten (wird von der Seite separat für den gewählten Markt geladen)
-    if (!priceJson) {
-      await page.waitForResponse((r) => r.url().includes('/api/pricepds'), { timeout: 25000 }).catch(() => {});
-      await page.waitForTimeout(300);
+    const webcode = String(info.webcode);
+    const deadline = Date.now() + 25000;
+    while (!priceFor(webcode) && Date.now() < deadline) await page.waitForTimeout(250);
+    const hit = priceFor(webcode);
+    if (!hit) {
+      const other = prices.find((x) => x.url.includes('webcode=' + webcode));
+      throw new Error(other
+        ? 'Der von expert.de geladene Preis gehört nicht zum Markt Asbach – abgebrochen.'
+        : 'Preis für Markt Asbach konnte nicht geladen werden.');
     }
-    if (!priceJson) throw new Error('Preis für Markt Asbach konnte nicht geladen werden.');
-    if (priceJson.store !== STORE_ID || !String(priceUrl).includes('storeId=' + STORE_ID)) {
-      throw new Error('Der geladene Preis gehört nicht zum Markt Asbach – abgebrochen.');
-    }
+    const priceJson = hit.json;
     const p = priceJson.price || {};
     const promo = priceJson.promotionPrice || {};
     const price = typeof promo.currentPrice === 'number' ? promo.currentPrice : p.bruttoPrice;

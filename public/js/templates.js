@@ -54,7 +54,7 @@
       const showUvp = d.showUvp !== false && pct !== null && pct >= 1;
       const bullets = (d.bullets || []).filter((b) => String(b).trim());
       const qrSrc = d.qrUrl ? (opts.qrBase || '') + '/api/qr?text=' + encodeURIComponent(d.qrUrl) : '';
-      const logoSrc = d.logoData || (d.logoUrl ? (opts.qrBase || '') + '/api/img?url=' + encodeURIComponent(d.logoUrl) : '');
+      const logoSrc = d.logoData || (!d.logoUrl ? '' : d.logoUrl.startsWith('/') ? (opts.qrBase || '') + d.logoUrl : (opts.qrBase || '') + '/api/img?url=' + encodeURIComponent(d.logoUrl));
 
       return `
 <div class="pt pt-expert-a5" data-template="expert-a5" style="width:148mm;height:210mm">

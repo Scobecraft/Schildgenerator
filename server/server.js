@@ -1,5 +1,15 @@
 const path = require('path');
+
+// Einstellungen aus .env (z. B. ANTHROPIC_API_KEY=...) laden, falls vorhanden
+try {
+  const envFile = require('fs').readFileSync(path.join(__dirname, '..', '.env'), 'utf8');
+  for (const line of envFile.split(/\r?\n/)) {
+    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/);
+    if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^['"]|['"]$/g, '');
+  }
+} catch (_) { /* keine .env vorhanden */ }
 const crypto = require('crypto');
+const fs = require('fs');
 const express = require('express');
 const QRCode = require('qrcode');
 const { lookup, getBrowser, STORE_ID } = require('./expert');
@@ -10,13 +20,59 @@ const app = express();
 app.use(express.json({ limit: '60mb' }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
+// ---------- Logo-Bibliothek (hochauflösende PNGs pro Marke) ----------
+const LOGO_DIR = path.join(__dirname, '..', 'data', 'logos');
+fs.mkdirSync(LOGO_DIR, { recursive: true });
+app.use('/logos', express.static(LOGO_DIR, { maxAge: 0 }));
+const slug = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+function libraryLogo(...names) {
+  for (const n of names) {
+    const f = slug(n) && path.join(LOGO_DIR, slug(n) + '.png');
+    if (f && fs.existsSync(f)) return `/logos/${slug(n)}.png?v=${Math.round(fs.statSync(f).mtimeMs)}`;
+  }
+  return null;
+}
+app.get('/api/logos', (req, res) => {
+  const list = fs.readdirSync(LOGO_DIR).filter((f) => f.endsWith('.png')).sort().map((f) => ({
+    brand: f.replace(/\.png$/, ''),
+    url: `/logos/${f}?v=${Math.round(fs.statSync(path.join(LOGO_DIR, f)).mtimeMs)}`,
+  }));
+  res.json(list);
+});
+app.post('/api/logos', async (req, res) => {
+  try {
+    const { brand, dataUrl } = req.body || {};
+    const name = slug(brand);
+    if (!name) return res.status(400).json({ error: 'Markenname fehlt.' });
+    const m = /^data:image\/png;base64,(.+)$/.exec(String(dataUrl || ''));
+    if (!m) return res.status(400).json({ error: 'Bitte nur PNG-Dateien verwenden.' });
+    let buf = Buffer.from(m[1], 'base64');
+    if (!buf.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return res.status(400).json({ error: 'Die Datei ist kein gültiges PNG.' });
+    buf = await toTrimmedPng(buf, 'image/png');
+    fs.writeFileSync(path.join(LOGO_DIR, name + '.png'), buf);
+    res.json({ brand: name, url: libraryLogo(name) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+app.delete('/api/logos/:brand', (req, res) => {
+  const f = path.join(LOGO_DIR, slug(req.params.brand) + '.png');
+  if (fs.existsSync(f)) fs.unlinkSync(f);
+  res.json({ ok: true });
+});
+
 app.get('/api/status', (req, res) => {
   res.json({ store: 'expert Asbach', storeId: STORE_ID, uvpConfigured: isConfigured() });
 });
 
 app.get('/api/lookup', async (req, res) => {
   try {
-    res.json(await lookup(req.query.q));
+    const r = await lookup(req.query.q);
+    const lib = libraryLogo(r.brand, r.manufacturer);
+    r.logoSource = lib ? 'library' : (r.logoUrl ? 'expert' : null);
+    if (lib) { r.expertLogoUrl = r.logoUrl; r.logoUrl = lib; }
+    r.logoBrand = slug(r.brand || r.manufacturer);
+    res.json(r);
   } catch (e) {
     res.status(422).json({ error: e.message || String(e) });
   }
@@ -128,7 +184,14 @@ app.post('/api/pdf', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+const httpServer = app.listen(PORT, () => {
   console.log(`Preisschild-Studio läuft auf http://localhost:${PORT}`);
   console.log(`UVP-Recherche: ${isConfigured() ? 'aktiv' : 'aus (ANTHROPIC_API_KEY setzen, um sie zu aktivieren)'}`);
+});
+httpServer.on('error', (e) => {
+  if (e.code === 'EADDRINUSE') {
+    console.error(`Port ${PORT} ist schon belegt – läuft der Schildgenerator schon? Sonst in .env einen anderen PORT eintragen.`);
+    process.exit(1);
+  }
+  throw e;
 });
