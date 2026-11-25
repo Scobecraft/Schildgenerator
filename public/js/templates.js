@@ -30,7 +30,7 @@
     height: 210,
     // Verschiebbare Felder (Standardposition in mm)
     fields: {
-      qr:      { label: 'QR-Code',        x: 127.8, y: 8.2,   w: 13.9, h: 13.9 },
+      qr:      { label: 'QR-Code',        x: 120.6, y: 9.6,   w: 24,   h: 24 },
       logo:    { label: 'Herstellerlogo', x: 3.5,   y: 38.6,  w: 64,   h: 19.6 },
       group:   { label: 'Warengruppe',    x: 3.3,   y: 62.9,  w: 140,  h: 7.6 },
       name:    { label: 'Artikelname',    x: 3.3,   y: 70.2,  w: 140,  h: 7.6 },

@@ -16,14 +16,25 @@ let browserPromise = null;
 let contextPromise = null;
 let queue = Promise.resolve();
 
-async function getContext() {
+// Startet Chromium bei Bedarf. Stürzt der Browser ab oder wird er geschlossen,
+// wird beim nächsten Aufruf automatisch ein neuer gestartet.
+function launchBrowser() {
   if (!browserPromise) {
-    browserPromise = chromium.launch().catch((e) => { browserPromise = null; throw e; });
+    browserPromise = chromium.launch().then((browser) => {
+      browser.on('disconnected', () => { browserPromise = null; contextPromise = null; });
+      return browser;
+    }).catch((e) => { browserPromise = null; throw e; });
   }
+  return browserPromise;
+}
+
+async function getContext() {
+  await launchBrowser();
   if (!contextPromise) {
     contextPromise = (async () => {
       const browser = await browserPromise;
       const ctx = await browser.newContext({ locale: 'de-DE', viewport: { width: 1280, height: 900 } });
+      ctx.on('close', () => { contextPromise = null; });
       // Bilder/Fonts/Media brauchen wir für die Datenabfrage nicht -> schneller
       await ctx.route('**/*', (route) => {
         const t = route.request().resourceType();
@@ -244,15 +255,32 @@ async function lookupInternal(query) {
 }
 
 // Anfragen nacheinander abarbeiten (schont expert.de und hält den Markt-Cookie stabil)
+async function lookupWithRetry(query) {
+  try {
+    return await lookupInternal(query);
+  } catch (e) {
+    if (/has been closed|Target closed|browser has disconnected/i.test(String(e && e.message))) {
+      await closeBrowser();
+      return lookupInternal(query);
+    }
+    throw e;
+  }
+}
+
 function lookup(query) {
-  const run = queue.then(() => lookupInternal(query));
+  const run = queue.then(() => lookupWithRetry(query));
   queue = run.catch(() => {});
   return run;
 }
 
 async function getBrowser() {
-  if (!browserPromise) browserPromise = chromium.launch().catch((e) => { browserPromise = null; throw e; });
-  return browserPromise;
+  return launchBrowser();
 }
 
-module.exports = { lookup, getBrowser, STORE_ID };
+async function closeBrowser() {
+  const p = browserPromise;
+  browserPromise = null; contextPromise = null;
+  if (p) { try { await (await p).close(); } catch (_) { /* egal */ } }
+}
+
+module.exports = { lookup, getBrowser, closeBrowser, STORE_ID };

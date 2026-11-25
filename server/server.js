@@ -12,8 +12,9 @@ const crypto = require('crypto');
 const fs = require('fs');
 const express = require('express');
 const QRCode = require('qrcode');
-const { lookup, getBrowser, STORE_ID } = require('./expert');
+const { lookup, getBrowser, closeBrowser, STORE_ID } = require('./expert');
 const { findUvp, isConfigured } = require('./uvp');
+const { prepareLogo } = require('./logo');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0'; // auf dem Server: 127.0.0.1 (nur über nginx erreichbar)
@@ -49,9 +50,20 @@ app.post('/api/logos', async (req, res) => {
     if (!m) return res.status(400).json({ error: 'Bitte nur PNG-Dateien verwenden.' });
     let buf = Buffer.from(m[1], 'base64');
     if (!buf.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return res.status(400).json({ error: 'Die Datei ist kein gültiges PNG.' });
-    buf = await toTrimmedPng(buf, 'image/png');
+    buf = (await prepareLogo(buf, 'image/png')).buf;
     fs.writeFileSync(path.join(LOGO_DIR, name + '.png'), buf);
     res.json({ brand: name, url: libraryLogo(name) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+// Einzelnes PNG aufbereiten (zuschneiden + hochskalieren), ohne es zu speichern
+app.post('/api/logos/prepare', async (req, res) => {
+  try {
+    const m = /^data:image\/png;base64,(.+)$/.exec(String((req.body || {}).dataUrl || ''));
+    if (!m) return res.status(400).json({ error: 'Bitte nur PNG-Dateien verwenden.' });
+    const r = await prepareLogo(Buffer.from(m[1], 'base64'), 'image/png');
+    res.json({ dataUrl: 'data:image/png;base64,' + r.buf.toString('base64'), ...r.info });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -98,45 +110,6 @@ app.get('/api/qr', async (req, res) => {
 const imgCache = new Map();
 const ALLOWED_IMG_HOSTS = ['cdn.expert.de', 'www.expert.de', 'production.brntgs.expert.de'];
 
-// Wandelt jedes Bild in PNG um und schneidet leere (transparente oder weiße) Ränder ab,
-// damit das Logo die vorgesehene Fläche wirklich ausfüllt.
-async function toTrimmedPng(buf, mime) {
-  const browser = await getBrowser();
-  const page = await browser.newPage();
-  try {
-    const dataUrl = `data:${mime};base64,${buf.toString('base64')}`;
-    const out = await page.evaluate(async ({ src, isSvg }) => {
-      const img = new Image();
-      img.src = src;
-      await img.decode();
-      let w = img.naturalWidth, h = img.naturalHeight;
-      if (isSvg || !w) { const s = 1600 / Math.max(w || 1, h || 1); w = Math.round((w || 800) * s); h = Math.round((h || 400) * s); }
-      const c = document.createElement('canvas');
-      c.width = w; c.height = h;
-      const ctx = c.getContext('2d');
-      ctx.drawImage(img, 0, 0, w, h);
-      const d = ctx.getImageData(0, 0, w, h).data;
-      let x0 = w, y0 = h, x1 = -1, y1 = -1;
-      for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
-          const i = (y * w + x) * 4;
-          const a = d[i + 3];
-          const nearWhite = d[i] > 245 && d[i + 1] > 245 && d[i + 2] > 245;
-          if (a > 16 && !nearWhite) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
-        }
-      }
-      if (x1 < 0) return c.toDataURL('image/png');
-      const cw = x1 - x0 + 1, ch = y1 - y0 + 1;
-      const c2 = document.createElement('canvas');
-      c2.width = cw; c2.height = ch;
-      c2.getContext('2d').drawImage(c, x0, y0, cw, ch, 0, 0, cw, ch);
-      return c2.toDataURL('image/png');
-    }, { src: dataUrl, isSvg: /svg/.test(mime) });
-    return Buffer.from(out.split(',')[1], 'base64');
-  } finally {
-    await page.close();
-  }
-}
 
 app.get('/api/img', async (req, res) => {
   try {
@@ -148,7 +121,7 @@ app.get('/api/img', async (req, res) => {
     const mime = (r.headers.get('content-type') || '').split(';')[0];
     let buf = Buffer.from(await r.arrayBuffer());
     const isPng = buf.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
-    buf = await toTrimmedPng(buf, isPng ? 'image/png' : (mime || 'image/svg+xml'));
+    buf = (await prepareLogo(buf, isPng ? 'image/png' : (mime || 'image/svg+xml'))).buf;
     imgCache.set(url.href, buf);
     res.type('image/png').set('Cache-Control', 'public, max-age=86400').send(buf);
   } catch (e) {
@@ -196,3 +169,12 @@ httpServer.on('error', (e) => {
   }
   throw e;
 });
+
+// Sauber beenden (z. B. bei "docker compose down" oder Neustart)
+for (const sig of ['SIGTERM', 'SIGINT']) {
+  process.on(sig, async () => {
+    httpServer.close();
+    await closeBrowser();
+    process.exit(0);
+  });
+}

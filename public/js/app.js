@@ -391,11 +391,11 @@
     let pill = '';
     if (d.logoData) pill = '<span class="pill">eigenes PNG</span>';
     else if (d.logoUrl && d.logoUrl.startsWith('/logos/')) pill = '<span class="pill pill-ok">Bibliothek · hochauflösend</span>';
-    else if (d.logoUrl) pill = '<span class="pill pill-warn">expert.de · niedrige Auflösung</span>';
+    else if (d.logoUrl) pill = '<span class="pill pill-orange">expert.de · hochskaliert</span>';
     return `
       <div class="ed-field"><span>Herstellerlogo ${pill}</span>
         <div class="logo-prev">${src ? `<img src="${esc(src)}" alt="">` : '<span class="muted">kein Logo</span>'}</div>
-        ${d.logoUrl && !d.logoUrl.startsWith('/') && !d.logoData ? '<div class="warn-box">Das Logo von expert.de ist sehr klein und kann im Druck unscharf wirken. Für scharfen Druck ein großes PNG hochladen – es wird dann für alle Artikel dieser Marke verwendet.</div>' : ''}
+        ${d.logoUrl && !d.logoUrl.startsWith('/') && !d.logoData ? '<div class="uvp-note" style="margin:0 0 8px">Das Logo von expert.de ist klein und wurde automatisch hochskaliert und geschärft. Ein großes Original-PNG des Herstellers ist trotzdem noch schärfer.</div>' : ''}
         <div class="btn-row">
           <label class="btn btn-sm"><input type="file" accept="image/png" hidden data-do="logoBrand">PNG für Marke${t.meta.logoBrand ? ' „' + esc(t.meta.logoBrand) + '“' : ''}</label>
           <label class="btn btn-sm"><input type="file" accept="image/png" hidden data-do="logoOnly">PNG nur hier</label>
@@ -507,7 +507,11 @@
     if (file.type !== 'image/png') { toast('Bitte nur PNG-Dateien verwenden.', 'err'); return; }
     const dataUrl = await readFile(file);
     if (a === 'logoOnly') {
-      t.data.logoData = dataUrl; save(); renderStage(); renderEditor(); return;
+      try {
+        const r = await api('/api/logos/prepare', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dataUrl }) });
+        t.data.logoData = r.dataUrl;
+      } catch (err) { toast(err.message, 'err'); return; }
+      save(); renderStage(); renderEditor(); return;
     }
     let brand = t.meta.logoBrand;
     if (!brand) brand = prompt('Für welche Marke ist dieses Logo? (z. B. logitech-g)', (t.meta.brand || '').toLowerCase()) || '';
