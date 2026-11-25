@@ -14,7 +14,6 @@ curl -fsSL https://raw.githubusercontent.com/Scobecraft/schildgenerator/main/ins
 Das Skript installiert bei Bedarf Docker, lädt den Schildgenerator nach `~/schildgenerator` und startet ihn. Danach läuft die Seite unter `http://SERVER-IP:3000` und startet nach einem Neustart automatisch.
 
 - **Aktualisieren:** denselben Befehl nochmal ausführen (oder `cd ~/schildgenerator && git pull && docker compose up -d --build`)
-- **UVP-Suche (optional):** API-Key in `~/schildgenerator/.env` eintragen, dann `cd ~/schildgenerator && docker compose up -d`
 - **Logs:** `cd ~/schildgenerator && docker compose logs --tail 50`
 - **Proxmox-LXC:** Für Docker muss beim Container „Nesting“ aktiviert sein.
 - Die Seite hat **keinen eigenen Passwortschutz**. Öffentlich nur über Cloudflare Tunnel + Cloudflare Access (oder einen anderen Schutz) freigeben.
@@ -44,7 +43,7 @@ Die Liste bleibt im Browser gespeichert.
 | Preis | Nur expert.de, Markt Asbach. Das Tool wählt den Markt über `expert.de/markt/asbach`, prüft die Markt-ID (`e_14756046`) und vergleicht mit dem angezeigten Preis. Sonst Abbruch mit Fehlermeldung. |
 | Warengruppe, Name, Art.Nr., Eigenschaften | expert.de-Produktseite |
 | Herstellerlogo | Logo-Bibliothek (eigene hochauflösende PNGs) oder sonst das Logo von expert.de (klein, für Druck eher unscharf) |
-| UVP | Websuche (Herstellerseiten, Fachpresse), mit Quellen. Immer als „bitte prüfen“ markiert, bis bestätigt. |
+| UVP | Automatisch, wenn auf der expert-Produktseite eine Hersteller-UVP hinterlegt ist (wie dort angezeigt). Sonst von Hand eintragen; der Knopf „UVP bei Google suchen“ hilft dabei. |
 | Ersparnis | (UVP − Preis) / UVP, abgerundet |
 | QR-Code | expert.de-Produktseite mit Markt Asbach |
 
@@ -57,7 +56,7 @@ Schriften (frei, dem Original am nächsten): Roboto Condensed für Texte, Archiv
 ## Technik
 
 - `server/expert.js` – Abruf von expert.de über einen unsichtbaren Browser (Playwright/Chromium)
-- `server/uvp.js` – UVP-Recherche über Claude mit Websuche
+- `server/logo.js` – Logos zuschneiden und hochskalieren
 - `server/server.js` – Webserver, PDF-Erstellung, Logos, QR-Codes
 - `Dockerfile`, `docker-compose.yml`, `install.sh` – Installation auf dem Server
 - `public/` – die Webseite

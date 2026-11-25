@@ -1,6 +1,6 @@
 const path = require('path');
 
-// Einstellungen aus .env (z. B. ANTHROPIC_API_KEY=...) laden, falls vorhanden
+// Einstellungen aus .env (z. B. PORT=...) laden, falls vorhanden
 try {
   const envFile = require('fs').readFileSync(path.join(__dirname, '..', '.env'), 'utf8');
   for (const line of envFile.split(/\r?\n/)) {
@@ -13,7 +13,6 @@ const fs = require('fs');
 const express = require('express');
 const QRCode = require('qrcode');
 const { lookup, getBrowser, closeBrowser, STORE_ID } = require('./expert');
-const { findUvp, isConfigured } = require('./uvp');
 const { prepareLogo } = require('./logo');
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -75,7 +74,7 @@ app.delete('/api/logos/:brand', (req, res) => {
 });
 
 app.get('/api/status', (req, res) => {
-  res.json({ store: 'expert Asbach', storeId: STORE_ID, uvpConfigured: isConfigured() });
+  res.json({ store: 'expert Asbach', storeId: STORE_ID });
 });
 
 app.get('/api/lookup', async (req, res) => {
@@ -88,14 +87,6 @@ app.get('/api/lookup', async (req, res) => {
     res.json(r);
   } catch (e) {
     res.status(422).json({ error: e.message || String(e) });
-  }
-});
-
-app.post('/api/uvp', async (req, res) => {
-  try {
-    res.json(await findUvp(req.body || {}));
-  } catch (e) {
-    res.status(500).json({ error: 'UVP-Recherche fehlgeschlagen: ' + (e.message || String(e)) });
   }
 });
 
@@ -160,7 +151,6 @@ app.post('/api/pdf', async (req, res) => {
 
 const httpServer = app.listen(PORT, HOST, () => {
   console.log(`Schildgenerator läuft auf http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`);
-  console.log(`UVP-Recherche: ${isConfigured() ? 'aktiv' : 'aus (ANTHROPIC_API_KEY setzen, um sie zu aktivieren)'}`);
 });
 httpServer.on('error', (e) => {
   if (e.code === 'EADDRINUSE') {

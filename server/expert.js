@@ -112,6 +112,7 @@ function extractInPage() {
     headline: a.headline || headline,
     descriptionList: a.descriptionList || [],
     formerPriceState: a.formerPriceState || null,
+    formerBruttoPrice: a.formerBruttoPrice != null ? a.formerBruttoPrice : null,
     slug: a.slug,
     manufacturer: pds.manufacturer ? pds.manufacturer.name : null,
     brandName: (brandFull && brandFull.name) || (pds.brand && pds.brand.name) || null,
@@ -135,6 +136,20 @@ function originalCdnUrl(u) {
   if (u.startsWith('//')) u = 'https:' + u;
   if (u.startsWith('/')) u = 'https://cdn.expert.de' + u;
   return u.replace(/\/cdn-cgi\/image\/[^/]+\//, '/');
+}
+
+// "444.- inkl. MwSt." / "46.99 inkl. MwSt." / "1.299.- inkl. MwSt." -> Zahl
+function parseShownPrice(text) {
+  const m = String(text).match(/(\d[\d.]*?)\.(\d{2}|-)\s*inkl\.?\s*MwSt/i);
+  if (!m) return null;
+  const euros = m[1].replace(/\./g, '');
+  return { value: parseFloat(euros + '.' + (m[2] === '-' ? '00' : m[2])), text: m[0].replace(/\s*inkl.*$/i, '') };
+}
+// "UVP 549€" / "UVP 579.99€" -> Zahl
+function parseShownUvp(text) {
+  const m = String(text).match(/UVP\s*(\d[\d.]*?)(?:[.,](\d{2}))?\s*€/i);
+  if (!m) return null;
+  return parseFloat(m[1].replace(/\./g, '') + '.' + (m[2] || '00'));
 }
 
 async function lookupInternal(query) {
@@ -194,28 +209,28 @@ async function lookupInternal(query) {
     const price = typeof promo.currentPrice === 'number' ? promo.currentPrice : p.bruttoPrice;
     if (typeof price !== 'number' || !(price > 0)) throw new Error('Für dieses Produkt ist im Markt Asbach kein Preis hinterlegt.');
 
-    // Gegenprobe mit dem sichtbaren Preis auf der Seite
-    await page.waitForFunction(() => /\d/.test((document.querySelector('.price') || {}).innerText || ''), null, { timeout: 8000 }).catch(() => {});
+    // Gegenprobe mit dem sichtbaren Preis auf der Seite (die Zahl direkt vor "inkl. MwSt.")
+    await page.waitForFunction(() => /inkl\.?\s*MwSt/i.test((document.querySelector('.price') || {}).innerText || ''), null, { timeout: 8000 }).catch(() => {});
     const domPrice = await page.evaluate(() => ((document.querySelector('.price') || {}).innerText || '').replace(/\s+/g, ' ').trim());
-    const m = domPrice.match(/(\d{1,3}(?:\.\d{3})*|\d+)(?:,(\d{2}))?[.,]?-?/);
-    let domValue = null;
-    if (m) domValue = parseFloat(m[1].replace(/\./g, '') + '.' + (m[2] || '00'));
-    // Formate wie "27.-" oder "27.99"
-    const m2 = domPrice.match(/^(\d+)\.(\d{2}|-)/);
-    if (m2) domValue = parseFloat(m2[1] + '.' + (m2[2] === '-' ? '00' : m2[2]));
+    const shown = parseShownPrice(domPrice);
     const warnings = [];
-    if (domValue !== null && Math.abs(domValue - price) > 0.005) {
-      warnings.push(`Preis-Abweichung: Seite zeigt ${domPrice.split(' ')[0]}, Marktdaten ${price.toFixed(2)} €. Bitte prüfen.`);
+    if (shown === null) {
+      warnings.push('Der Preis auf der expert-Seite konnte nicht gegengeprüft werden. Bitte Preis kontrollieren.');
+    } else if (Math.abs(shown.value - price) > 0.005) {
+      warnings.push(`Preis-Abweichung: Seite zeigt ${shown.text}, Marktdaten ${price.toFixed(2)} €. Bitte prüfen.`);
     }
 
-    // Streichpreis / UVP, falls expert selbst einen anzeigt
+    // UVP: nur wenn expert selbst eine Hersteller-UVP hinterlegt hat und sie auch anzeigt
+    // (gleiche Regel wie expert.de: Kennzeichen "uvp" + UVP-Betrag höher als der Preis)
     let expertUvp = null;
-    const strike = await page.evaluate(() => {
-      const t = ((document.querySelector('.price') || {}).innerText || '').replace(/\s+/g, ' ');
-      const mm = t.match(/(?:UVP|statt|Unverbindliche Preisempfehlung)[^\d]{0,20}(\d+(?:[.,]\d{2})?)/i);
-      return mm ? mm[1] : null;
-    });
-    if (strike) expertUvp = parseFloat(strike.replace(',', '.'));
+    const fbp = Number(info.formerBruttoPrice);
+    if (/^uvp$/i.test(String(info.formerPriceState || '').trim()) && fbp > price) {
+      expertUvp = Math.round(fbp * 100) / 100;
+      const shownUvp = parseShownUvp(domPrice);
+      if (shownUvp !== null && Math.abs(shownUvp - expertUvp) > 0.005) {
+        warnings.push(`UVP-Abweichung: Seite zeigt UVP ${shownUvp} €, Daten ${expertUvp} €. Bitte prüfen.`);
+      }
+    }
 
     const canonical = url.split('?')[0];
     let logo = originalCdnUrl(info.brandLogo || info.domLogo);
@@ -244,7 +259,7 @@ async function lookupInternal(query) {
         storeId: priceJson.store,
         storeStock: p.storeStock,
         storeAvailability: p.storeAvailability,
-        shownOnPage: domPrice.split(' ')[0] || null,
+        shownOnPage: shown ? shown.text : null,
       },
       expertUvp,
       warnings,

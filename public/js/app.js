@@ -9,7 +9,6 @@
 
   // ---------------------------------------------------------------- Zustand
   let state = { tags: [], selectedId: null, print: { paper: 'A4', margin: 0, gap: 0, rotate: true, cut: true }, template: DEFAULT_TEMPLATE };
-  let server = { uvpConfigured: false };
   let selectedField = null;
 
   try {
@@ -19,7 +18,6 @@
   // Abrufe, die beim Schließen liefen, gelten als abgebrochen
   state.tags.forEach((t) => {
     if (t.status === 'loading') { t.status = 'error'; t.error = 'Abruf unterbrochen – bitte neu laden.'; }
-    if (t.meta && t.meta.uvp && t.meta.uvp.status === 'loading') t.meta.uvp.status = 'idle';
   });
 
   let saveTimer = null;
@@ -117,13 +115,17 @@
       renderList();
       if (state.selectedId === id) { renderStage(); renderEditor(); }
 
+      // UVP: nur von expert.de übernehmen. Von Hand eingetragene UVP bleibt erhalten.
       const u = t.meta.uvp || {};
-      if (r.expertUvp && !u.manual) {
-        t.data.uvp = r.expertUvp;
-        t.meta.uvp = { status: 'found', source: 'expert.de', confidence: 'hoch', confirmed: false, sources: [{ url: r.productUrl, title: 'expert.de Produktseite', quote: 'UVP ' + r.expertUvp }] };
+      if (!u.manual) {
+        if (r.expertUvp) {
+          t.data.uvp = r.expertUvp;
+          t.meta.uvp = { status: 'expert' };
+        } else {
+          t.data.uvp = null;
+          t.meta.uvp = { status: 'none' };
+        }
         save(); refreshTag(id);
-      } else if (!u.manual && !(u.status === 'found' && t.data.uvp)) {
-        researchUvp(id);
       }
     } catch (e) {
       const t = getTag(id);
@@ -136,37 +138,6 @@
     }
   }
 
-  async function researchUvp(id) {
-    const t = getTag(id);
-    if (!t) return;
-    if (!server.uvpConfigured) {
-      t.meta.uvp = { status: 'off', note: 'Automatische UVP-Recherche ist nicht eingerichtet. Bitte UVP von Hand eintragen.' };
-      save(); refreshTag(id);
-      return;
-    }
-    t.meta.uvp = { status: 'loading' };
-    refreshTag(id);
-    try {
-      const r = await api('/api/uvp', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ brand: t.meta.brand, manufacturer: t.meta.manufacturer, name: t.data.name, fullName: t.meta.fullName, group: t.data.group, ean: t.meta.ean, mpn: t.meta.mpn }),
-      });
-      const tt = getTag(id);
-      if (!tt || (tt.meta.uvp && tt.meta.uvp.manual)) return;
-      if (r.uvp) {
-        tt.data.uvp = r.uvp;
-        tt.meta.uvp = { status: 'found', confidence: r.confidence, sources: r.sources || [], note: r.note, confirmed: false };
-      } else {
-        tt.meta.uvp = { status: r.unavailable ? 'off' : 'notfound', note: r.note, sources: r.sources || [] };
-      }
-    } catch (e) {
-      const tt = getTag(id);
-      if (tt) tt.meta.uvp = { status: 'error', note: e.message };
-    }
-    save();
-    refreshTag(id);
-  }
-
   function refreshTag(id) {
     renderList();
     if (state.selectedId === id) { renderStage(); renderEditor(); }
@@ -176,8 +147,7 @@
   function statusDot(t) {
     if (t.status === 'loading') return '<span class="dot dot-load" title="Wird abgerufen"></span>';
     if (t.status === 'error') return '<span class="dot dot-err" title="Fehler"></span>';
-    const u = t.meta && t.meta.uvp;
-    if ((t.warnings && t.warnings.length) || (u && u.status === 'found' && !u.confirmed)) return '<span class="dot dot-warn" title="Bitte prüfen"></span>';
+    if (t.warnings && t.warnings.length) return '<span class="dot dot-warn" title="Bitte prüfen"></span>';
     if (t.status === 'manual') return '<span class="dot" title="Manuell"></span>';
     return '<span class="dot dot-ok" title="OK"></span>';
   }
@@ -358,28 +328,32 @@
   function renderStageDebounced() { clearTimeout(stageTimer); stageTimer = setTimeout(renderStage, 120); }
 
   // ---------------------------------------------------------------- Editor
+  function googleUvpUrl(t) {
+    const m = t.meta || {};
+    const brand = m.brand || m.manufacturer || '';
+    const q = [brand, t.data.name || m.fullName || t.query, 'UVP Preis'].filter(Boolean).join(' ');
+    // udm=50 öffnet direkt den KI-Modus der Google-Suche
+    return 'https://www.google.com/search?udm=50&q=' + encodeURIComponent(q);
+  }
+
   function uvpBlock(t) {
     const u = (t.meta && t.meta.uvp) || {};
     const pct = PT.savingsPercent(t.data.price, t.data.uvp);
     let pill = '';
-    if (u.status === 'loading') pill = '<span class="pill pill-orange"><span class="spinner"></span> sucht im Netz…</span>';
-    else if (u.manual) pill = '<span class="pill">manuell</span>';
-    else if (u.status === 'found') pill = u.confirmed ? '<span class="pill pill-ok">✓ geprüft</span>' : `<span class="pill pill-warn">bitte prüfen${u.confidence ? ' · Sicherheit ' + esc(u.confidence) : ''}</span>`;
-    else if (u.status === 'notfound') pill = '<span class="pill pill-warn">nicht gefunden</span>';
-    else if (u.status === 'off') pill = '<span class="pill">Recherche aus</span>';
-    else if (u.status === 'error') pill = '<span class="pill pill-err">Fehler</span>';
-    const sources = (u.sources || []).filter((s) => s && s.url);
+    let note = '';
+    if (u.manual) pill = '<span class="pill">manuell</span>';
+    else if (u.status === 'expert') { pill = '<span class="pill pill-ok">von expert.de</span>'; note = 'Diese UVP ist auf der expert-Produktseite hinterlegt und wurde automatisch übernommen.'; }
+    else if (u.status === 'none') { pill = '<span class="pill">nicht auf expert.de</span>'; note = 'Auf expert.de ist keine UVP hinterlegt. Bei Bedarf von Hand eintragen.'; }
     return `
       <div class="uvp-box">
         <div class="ed-grid">
           <label class="ed-field"><span>UVP (€) ${pill}</span><input type="number" step="0.01" min="0" data-k="uvp" value="${t.data.uvp != null ? t.data.uvp : ''}" placeholder="z. B. 69.99"></label>
           <label class="ed-field"><span>Ersparnis</span><input type="text" value="${pct !== null ? pct + ' %' : '–'}" disabled title="Wird automatisch berechnet: (UVP − Preis) / UVP, abgerundet"></label>
         </div>
-        ${u.status === 'found' && !u.manual ? `<label class="check"><input type="checkbox" data-k="uvpConfirmed" ${u.confirmed ? 'checked' : ''}> UVP anhand der Quellen geprüft</label>` : ''}
-        ${sources.length ? `<ul class="uvp-sources">${sources.map((s) => `<li><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title || s.url)}</a>${s.quote ? ` – <i>„${esc(s.quote)}“</i>` : ''}</li>`).join('')}</ul>` : ''}
-        ${u.note ? `<div class="uvp-note">${esc(u.note)}</div>` : ''}
+        ${note ? `<div class="uvp-note">${esc(note)}</div>` : ''}
         <div class="btn-row" style="margin-top:8px">
-          <button class="btn btn-sm" type="button" data-do="uvp" ${u.status === 'loading' ? 'disabled' : ''} ${server.uvpConfigured ? '' : 'title="Nicht eingerichtet – ANTHROPIC_API_KEY beim Server setzen"'}>UVP im Netz suchen</button>
+          <a class="btn btn-sm" href="${esc(googleUvpUrl(t))}" target="_blank" rel="noopener" title="Öffnet die Google-Suche im KI-Modus in einem neuen Tab">UVP bei Google suchen ↗</a>
+          ${u.manual && t.meta && t.meta.fetchedAt ? '<button class="btn btn-sm" type="button" data-do="uvpReset">UVP von expert.de übernehmen</button>' : ''}
           <label class="check"><input type="checkbox" data-k="showUvp" ${t.data.showUvp !== false ? 'checked' : ''}> UVP-Feld anzeigen</label>
         </div>
       </div>`;
@@ -458,9 +432,8 @@
     else if (k === 'price') t.data.price = v === '' ? null : Math.round(parseFloat(v.replace(',', '.')) * 100) / 100;
     else if (k === 'uvp') {
       t.data.uvp = v === '' ? null : Math.round(parseFloat(v.replace(',', '.')) * 100) / 100;
-      t.meta.uvp = { ...(t.meta.uvp || {}), manual: true, confirmed: true, status: 'manual' };
+      t.meta.uvp = { manual: true, status: 'manual' };
     } else if (k === 'showUvp') t.data.showUvp = e.target.checked;
-    else if (k === 'uvpConfirmed') { t.meta.uvp.confirmed = e.target.checked; save(); renderList(); renderEditor(); return; }
     else t.data[k] = v;
     if (t.status === 'manual' || t.status === 'ok' || t.status === 'error') { /* Status bleibt */ }
     save();
@@ -488,9 +461,9 @@
     if (a === 'refetch') {
       if (!t.query) { toast('Bitte zuerst EAN oder Artikelnummer eintragen.', 'err'); return; }
       enqueueFetch(t); renderEditor();
-    } else if (a === 'uvp') {
-      t.meta.uvp = { ...(t.meta.uvp || {}), manual: false };
-      researchUvp(t.id);
+    } else if (a === 'uvpReset') {
+      t.meta.uvp = {};
+      enqueueFetch(t); renderEditor();
     } else if (a === 'logoExpert') {
       t.data.logoUrl = t.meta.expertLogoUrl; t.data.logoData = ''; save(); renderStage(); renderEditor();
     } else if (a === 'logoRemove') {
@@ -634,8 +607,6 @@ ${pages.map((p) => sheetHtml(p, opt)).join('\n')}
     const warn = [];
     const skipped = state.tags.filter((t) => t.qty > 0 && (t.status === 'loading' || t.status === 'error' || !(t.data.price > 0)));
     if (skipped.length) warn.push(`${skipped.length} Schild(er) werden nicht gedruckt (Fehler, noch im Abruf oder ohne Preis).`);
-    const unchecked = state.tags.filter((t) => t.qty > 0 && t.meta && t.meta.uvp && t.meta.uvp.status === 'found' && !t.meta.uvp.manual && !t.meta.uvp.confirmed && t.data.showUvp !== false);
-    if (unchecked.length) warn.push(`UVP noch nicht geprüft bei: ${unchecked.map((t) => esc(t.data.name || t.query)).join(', ')}.`);
     const changed = state.tags.filter((t) => t.qty > 0 && t.meta && t.meta.fetchedPrice != null && Math.abs((t.data.price || 0) - t.meta.fetchedPrice) > 0.004);
     if (changed.length) warn.push(`Preis weicht vom expert.de-Marktpreis ab bei: ${changed.map((t) => esc(t.data.name || t.query)).join(', ')}.`);
     if (res.tooBig.length) warn.push(`${res.tooBig.length} Schild(er) passen nicht aufs Papier – Rand verkleinern oder größeres Papier wählen.`);
@@ -741,12 +712,6 @@ ${pages.map((p) => sheetHtml(p, opt)).join('\n')}
   $('#inputTemplate').innerHTML = Object.values(PT.Templates).map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join('');
   $('#inputTemplate').value = state.template || DEFAULT_TEMPLATE;
 
-  api('/api/status').then((s) => {
-    server = s;
-    const chip = $('#uvpChip');
-    chip.innerHTML = `<span class="dot ${s.uvpConfigured ? 'dot-ok' : ''}"></span>UVP-Recherche ${s.uvpConfigured ? 'aktiv' : 'aus'}`;
-    chip.title = s.uvpConfigured ? 'UVP wird automatisch im Netz gesucht (bitte immer prüfen)' : 'Nicht eingerichtet: Server mit ANTHROPIC_API_KEY starten. UVP kann von Hand eingetragen werden.';
-  }).catch(() => {});
 
   if (!state.selectedId && state.tags[0]) state.selectedId = state.tags[0].id;
   document.fonts.ready.then(renderAll);

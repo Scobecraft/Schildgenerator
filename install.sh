@@ -51,7 +51,7 @@ if [ -n "$OK" ]; then
   printf '\n\033[1;32m✅ Schildgenerator läuft!\033[0m\n'
   printf '   Im Browser öffnen:  \033[1mhttp://%s:3000\033[0m\n' "${IP:-SERVER-IP}"
   printf '   Aktualisieren:      dieselbe Installationszeile nochmal ausführen\n'
-  printf '   UVP-Suche (optional): API-Key in %s/.env eintragen, dann: cd %s && docker compose up -d\n\n' "$DIR" "$DIR"
+  printf '\n'
 else
   printf '\n\033[1;31mDer Schildgenerator antwortet nicht.\033[0m Fehlermeldungen anzeigen mit:\n   cd %s && docker compose logs --tail 50\n\n' "$DIR"
   exit 1

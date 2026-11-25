@@ -57,6 +57,7 @@ h2 { font-size: 15px; margin: 0 0 10px; font-weight: 650; }
 .btn:hover { border-color: var(--line-strong); background: var(--surface-2); }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
 .btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
+a.btn { text-decoration: none; color: inherit; }
 .btn-primary { background: var(--orange); border-color: var(--orange); color: #fff; }
 .btn-primary:hover { background: var(--orange-600); border-color: var(--orange-600); }
 .btn-ghost { background: transparent; border-color: transparent; }
