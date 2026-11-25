@@ -200,6 +200,19 @@ textarea:focus, input:focus, select:focus { border-color: var(--orange); box-sha
 .seg button:hover { color: var(--text); }
 .seg button.on { background: var(--orange); color: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .15); }
 
+/* ---------- Statusanzeige (CPU / RAM / Speicher) ---------- */
+.sysmon { display: flex; gap: 6px; padding: 4px 10px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--line); margin-right: 4px; }
+.gauge { position: relative; width: 44px; display: flex; flex-direction: column; align-items: center; cursor: default; }
+.gauge svg { width: 34px; height: 34px; transform: rotate(-90deg); }
+.gauge circle { fill: none; stroke-width: 3.4; }
+.gauge .g-track { stroke: var(--line); }
+.gauge .g-bar { stroke: var(--orange); stroke-linecap: round; stroke-dasharray: 0 100; transition: stroke-dasharray .6s ease, stroke .3s; }
+.gauge.warn .g-bar { stroke: var(--warn); }
+.gauge.crit .g-bar { stroke: var(--err); }
+.gauge b { position: absolute; top: 0; left: 0; right: 0; height: 34px; display: grid; place-items: center; font-size: 10px; font-weight: 750; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.gauge span { font-size: 8.5px; line-height: 1; margin-top: 1px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-weight: 650; }
+@media (max-width: 1000px) { .sysmon { display: none; } }
+
 /* ---------- Sets ---------- */
 .set-bar { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; background: var(--surface-2); display: flex; flex-direction: column; gap: 10px; }
 .set-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }

@@ -14,6 +14,7 @@ const express = require('express');
 const QRCode = require('qrcode');
 const { lookup, getBrowser, closeBrowser, STORE_ID } = require('./expert');
 const { prepareLogo } = require('./logo');
+const system = require('./system');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0'; // auf dem Server: 127.0.0.1 (nur über nginx erreichbar)
@@ -146,6 +147,10 @@ app.put('/api/sets/:id', (req, res) => {
 app.delete('/api/sets/:id', (req, res) => {
   if (validSetId(req.params.id) && fs.existsSync(setFile(req.params.id))) fs.unlinkSync(setFile(req.params.id));
   res.json({ ok: true });
+});
+
+app.get('/api/system', (req, res) => {
+  res.set('Cache-Control', 'no-store').json(system.snapshot());
 });
 
 app.get('/api/status', (req, res) => {
