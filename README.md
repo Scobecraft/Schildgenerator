@@ -29,10 +29,35 @@ Beim ersten Start werden die nötigen Programme installiert. Danach öffnet sich
 
 ## Bedienung
 
-1. Links EAN oder Artikelnummern eingeben (eine pro Zeile, Menge z. B. `5099206080263 x3`) → **Abrufen**.
+1. Artikel hinzufügen: EAN oder Artikelnummer eintippen (eine pro Zeile, Menge z. B. `5099206080263 x3`), eine **Liste aus Excel einfügen** (EAN und Menge in beliebigen Spalten, Überschriften werden übersprungen) oder **scannen**.
 2. Schild in der Liste anklicken → Vorschau in der Mitte, Daten rechts ändern.
-3. Felder in der Vorschau anklicken und mit der Maus verschieben (oder Pfeiltasten). Größe über den Regler.
-4. **Ganzes Set drucken** → Papier und Ränder wählen → **PDF herunterladen**. Die Schilder werden automatisch platzsparend angeordnet (z. B. 2 × A5 auf A4 quer).
+3. Felder in der Vorschau anklicken und mit der Maus verschieben (oder Pfeiltasten). Größe über den Regler. **Rückgängig/Wiederholen** mit Strg+Z / Strg+Y oder den Pfeil-Knöpfen.
+4. **Ganzes Set drucken** → Papier und Rand wählen → **PDF herunterladen**. Die Schilder werden automatisch platzsparend angeordnet (z. B. 2 × A5 auf A4 quer).
+
+### Scannen
+
+- **USB-/Bluetooth-Barcodescanner:** einfach scannen, der Artikel landet direkt im aktuellen Set. Gleicher Artikel nochmal = Menge +1.
+- **Kamera** (Knopf „Scannen“): funktioniert am Handy und Laptop, **nur über HTTPS** (oder direkt auf dem Server über localhost).
+- **Handy-Ansicht:** Auf dem Smartphone erscheint automatisch eine vereinfachte Ansicht zum Scannen und Mengen festlegen. Am PC das Set unter „Alle Sets“ öffnen – Änderungen werden ab dann alle paar Sekunden abgeglichen.
+
+### Artikelname
+
+Lange Namen werden automatisch gekürzt (Teil vor dem ersten Komma, ohne Klammern). Mit **„Vollständig · 2 Zeilen“** wird stattdessen der volle Name zweizeilig gedruckt; Art.Nr. und Eigenschaften rutschen dann eine Zeile nach unten.
+
+### Preise aktuell halten
+
+- **↻ Preise prüfen** holt Preis, UVP und Bestand aller Schilder im Set neu von expert.de. Eigene Änderungen (Name, Eigenschaften, Positionen) bleiben, jede Preisänderung wird am Schild markiert.
+- **Preis-Wächter:** Jedes gedruckte Schild wird 180 Tage lang gemerkt und **täglich ab 6 Uhr** gegen expert.de geprüft. Die Glocke oben zeigt, wie viele Schilder im Laden einen veralteten Preis haben; „Nachdrucken“ legt ein neues Set mit genau diesen Artikeln an. Wer beim Drucken einen eigenen Preis eingetragen hat, wird nur gewarnt, wenn sich der expert-Preis ändert.
+
+### Drucken
+
+- **Rand:** Randlos, 3 mm, 5 mm oder eigener Wert. Die Druckeinstellungen gelten für alle Nutzer (auf dem Server gespeichert).
+- **Leicht verkleinern:** Passt mit Rand nicht mehr alles aufs Blatt, werden die Schilder um bis zu 5 % verkleinert (abschaltbar).
+- **Drucker-Testseite:** PDF mit 10-cm-Quadrat und Randlinien zum Nachmessen – zeigt, ob der Drucker in Originalgröße druckt und wie nah er an den Rand kommt.
+
+### Gleichzeitig bearbeiten
+
+Mehrere Geräte können dasselbe Set gleichzeitig bearbeiten. Änderungen werden pro Schild zusammengeführt (die neuere gewinnt), gelöschte Schilder bleiben gelöscht.
 
 ### Sets
 
@@ -72,6 +97,9 @@ Schriften (frei, dem Original am nächsten): Roboto Condensed für Texte, Archiv
 
 - `server/expert.js` – Abruf von expert.de über einen unsichtbaren Browser (Playwright/Chromium)
 - `server/logo.js` – Logos zuschneiden und hochskalieren
+- `server/watch.js` – Preis-Wächter (gedruckte Schilder, tägliche Prüfung)
+- `server/system.js` – Statusanzeige CPU/RAM/Speicher
+- `public/vendor/` – Barcode-Erkennung (barcode-detector + zxing-wasm, MIT)
 - `server/server.js` – Webserver, PDF-Erstellung, Logos, QR-Codes
 - `Dockerfile`, `docker-compose.yml`, `install.sh` – Installation auf dem Server
 - `public/` – die Webseite

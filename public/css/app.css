@@ -63,6 +63,8 @@ a.btn { text-decoration: none; color: inherit; }
 .btn-ghost { background: transparent; border-color: transparent; }
 .btn-ghost:hover { background: var(--orange-50); border-color: var(--orange-100); color: var(--orange-600); }
 .btn-sm { height: 30px; padding: 0 10px; font-size: 13px; }
+.btn.icon-only { width: 30px; padding: 0; }
+.btn.icon-only svg { width: 16px; height: 16px; }
 .badge { background: rgba(255, 255, 255, .25); padding: 0 7px; border-radius: 999px; font-size: 12px; line-height: 20px; }
 .link { background: none; border: 0; padding: 0; color: var(--orange-600); cursor: pointer; font-weight: 550; font-size: 13px; }
 .link:hover { text-decoration: underline; }
@@ -236,6 +238,30 @@ textarea:focus, input:focus, select:focus { border-color: var(--orange); box-sha
 .tpl-current b { display: block; }
 .tpl-pill { display: inline-block; font-size: 10px; font-weight: 700; padding: 0 6px; border-radius: 5px; background: var(--orange-50); color: var(--orange-600); border: 1px solid var(--orange-100); margin-right: 4px; vertical-align: 1px; }
 
+/* ---------- Preis-Wächter ---------- */
+.watch-btn svg { fill: none; stroke: currentColor; stroke-width: 2; }
+.watch-btn.alert { color: var(--err); }
+.alert-badge { background: var(--err); color: #fff; }
+.watch-summary { font-size: 13px; display: flex; flex-direction: column; gap: 2px; }
+.w-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--input); }
+.w-row.bad { border-color: var(--warn-line); background: var(--warn-bg); }
+.w-name { font-weight: 650; }
+.w-state { font-size: 13px; margin-top: 2px; }
+.w-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.w-bad { color: var(--err-text); font-weight: 600; }
+.w-ok { color: var(--ok); font-weight: 600; }
+.w-actions { display: flex; gap: 6px; }
+
+/* ---------- Scannen ---------- */
+.fetch-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 8px; }
+.scan-hint { font-size: 11.5px; margin-top: 6px; }
+.cam-modal { width: min(640px, calc(100vw - 16px)); }
+.cam-wrap { position: relative; border-radius: 12px; overflow: hidden; background: #000; aspect-ratio: 4 / 3; }
+.cam-wrap video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cam-frame { position: absolute; left: 12%; right: 12%; top: 32%; bottom: 32%; border: 3px solid var(--orange); border-radius: 12px; box-shadow: 0 0 0 9999px rgba(0, 0, 0, .35); }
+.cam-list { list-style: none; margin: 0; padding: 0; max-height: 130px; overflow-y: auto; font-family: ui-monospace, monospace; font-size: 13px; }
+.cam-list li { padding: 4px 0; border-bottom: 1px solid var(--line); }
+
 /* ---------- Sets ---------- */
 .set-bar { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; background: var(--surface-2); display: flex; flex-direction: column; gap: 10px; }
 .set-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
@@ -243,6 +269,8 @@ textarea:focus, input:focus, select:focus { border-color: var(--orange); box-sha
 .set-name { font-size: 16px; font-weight: 700; letter-spacing: -.01em; }
 .set-meta { font-size: 12px; }
 .set-actions { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.set-actions-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.tag-change { grid-column: 1 / -1; font-size: 12px; font-weight: 600; color: var(--warn-text); background: var(--warn-bg); border: 1px solid var(--warn-line); border-radius: 6px; padding: 2px 6px; }
 .set-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; max-height: calc(100vh - 220px); }
 .set-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--input); }
 .set-row.current { border-color: var(--orange); box-shadow: 0 0 0 3px rgba(244, 122, 37, .12); }
@@ -291,4 +319,44 @@ body, .topbar, .panel, .card, .tag-item, .btn, textarea, input, select, .stage-t
 @media (max-width: 1250px) {
   .app { grid-template-columns: 300px minmax(0, 1fr) 340px; }
   .topbar-chips { display: none; }
+}
+
+/* ---------- Handy-Ansicht ---------- */
+.mobile-note { display: none; }
+@media (max-width: 760px) {
+  html, body { height: auto; }
+  .topbar { height: 54px; padding: 0 12px; gap: 8px; }
+  .brand { min-width: 0; flex: 1; }
+  .brand-sub, .topbar-chips, .sysmon, #btnLogos, #btnPrint { display: none; }
+  .watch-btn { padding: 0 8px; font-size: 0; gap: 0; }
+  .watch-btn svg { width: 20px; height: 20px; }
+  .watch-btn .badge { font-size: 11px; margin-left: 2px; }
+  .app { display: block; height: auto; }
+  .stage-wrap, .panel-right { display: none; }
+  .panel-left { border-right: 0; padding: 12px; overflow: visible; }
+  .set-actions > #btnPrintSet { display: none; }
+  .add-card h2 { display: none; }
+  .fetch-row { grid-template-columns: 1fr; }
+  #btnScan { order: -1; height: 54px; font-size: 17px; background: var(--orange); border-color: var(--orange); color: #fff; }
+  #btnScan svg { width: 24px; height: 24px; }
+  #btnFetch { height: 42px; background: var(--surface); color: var(--orange-600); border-color: var(--orange-100); }
+  .tag-title { white-space: normal; }
+  .tag-title span { overflow-wrap: anywhere; }
+  #inputCodes { min-height: 44px; }
+  .scan-hint, #btnEmpty { display: none; }
+  .mobile-note { display: block; font-size: 12.5px; color: var(--muted); background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .tag-item { padding: 12px; }
+  .qty { height: 38px; }
+  .qty button { width: 38px; height: 36px; font-size: 18px; }
+  .qty input { width: 44px; height: 36px; font-size: 16px; }
+  .mini-btn { width: 36px; height: 36px; }
+  .modal { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; border-radius: 0; margin: 0; }
+  .modal-inner { max-height: 100dvh; height: 100%; }
+  .set-row { grid-template-columns: 1fr; }
+  .set-row-actions { grid-column: 1; grid-row: auto; }
+  .w-row { grid-template-columns: 1fr; }
+  .cam-wrap { aspect-ratio: 3 / 4; }
+  .toasts { left: 12px; right: 12px; bottom: 12px; }
+  .toast { max-width: none; }
+  input, select, textarea { font-size: 16px; } /* verhindert Zoom auf dem iPhone */
 }

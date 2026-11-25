@@ -39,6 +39,10 @@
       <div class="gauge" data-k="disk" title="Speicherplatz"><svg viewBox="0 0 36 36"><circle class="g-track" cx="18" cy="18" r="15.5"/><circle class="g-bar" cx="18" cy="18" r="15.5"/></svg><b>–</b><span>Speicher</span></div>
     </div>
     <div class="topbar-actions">
+      <button class="btn btn-ghost watch-btn" id="btnWatch" title="Preis-Wächter">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2 2 0 0 0 2-2h-4a2 2 0 0 0 2 2zM18 16V11a6 6 0 1 0-12 0v5l-2 2h16z"/></svg>
+        Preis-Wächter <span class="badge alert-badge" id="watchBadge" hidden>0</span>
+      </button>
       <button class="btn btn-ghost theme-btn" id="btnTheme" title="Dunkelmodus an/aus" aria-label="Dunkelmodus an/aus">
         <svg class="ic-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
         <svg class="ic-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
@@ -68,21 +72,36 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9V3h10v6M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M7 14h10v7H7z"/></svg>
             Ganzes Set drucken
           </button>
-          <button class="btn" id="btnNewSet" title="Leeres neues Set beginnen">+ Neues Set</button>
+          <div class="set-actions-row">
+            <button class="btn" id="btnCheckPrices" title="Preise und UVP aller Schilder in diesem Set neu von expert.de holen und Änderungen markieren">↻ Preise prüfen</button>
+            <button class="btn" id="btnNewSet" title="Leeres neues Set beginnen">+ Neues Set</button>
+          </div>
         </div>
       </section>
 
       <section class="card add-card">
         <h2>Artikel hinzufügen</h2>
-        <textarea id="inputCodes" rows="4" spellcheck="false" placeholder="EAN oder Artikelnummer – eine pro Zeile&#10;Menge optional, z. B.  5099206080263 x3"></textarea>
+        <textarea id="inputCodes" rows="4" spellcheck="false" placeholder="EAN oder Artikelnummer – eine pro Zeile&#10;Menge optional, z. B.  5099206080263 x3&#10;oder Liste aus Excel einfügen (EAN + Menge)"></textarea>
         <button type="button" class="tpl-chip" id="btnPickTemplate" title="Vorlage für neue Schilder wählen">
           <span class="tpl-chip-thumb" id="tplChipThumb"></span>
           <span class="tpl-chip-text"><small>Vorlage für neue Schilder</small><b id="tplChipName">–</b></span>
           <span class="tpl-chip-change">ändern</span>
         </button>
-        <button class="btn btn-primary btn-block" id="btnFetch">Abrufen</button>
+        <div class="fetch-row">
+          <button class="btn btn-primary" id="btnFetch">Abrufen</button>
+          <button class="btn" id="btnScan" title="Barcode mit der Kamera scannen">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 8v8M10 8v8M13 8v8M16 8v8"/></svg>
+            Scannen
+          </button>
+        </div>
+        <div class="scan-hint muted">USB-Barcodescanner: einfach scannen – der Artikel landet direkt im Set.</div>
         <button class="link" id="btnEmpty">+ Leeres Schild ohne Abruf</button>
       </section>
+
+      <div class="mobile-note">
+        <b>Handy-Ansicht:</b> Hier scannen und Mengen festlegen. Bearbeiten und Drucken am PC:
+        dort unter <b>Alle Sets</b> dieses Set öffnen – Änderungen werden ab dann automatisch abgeglichen.
+      </div>
 
       <div class="list-head">
         <h2>Schilder <span class="muted" id="listCount"></span></h2>
@@ -100,6 +119,8 @@
       <div class="stage-toolbar" id="stageToolbar">
         <div class="field-info" id="fieldInfo"><span class="muted">Feld anklicken zum Verschieben · Ziehen mit der Maus</span></div>
         <div class="field-tools">
+          <button class="btn btn-sm icon-only" id="btnUndo" title="Rückgängig (Strg+Z)" aria-label="Rückgängig" disabled><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg></button>
+          <button class="btn btn-sm icon-only" id="btnRedo" title="Wiederholen (Strg+Y)" aria-label="Wiederholen" disabled><svg viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/></svg></button>
           <label class="size-ctl" title="Größe des ausgewählten Felds">Größe
             <input type="range" id="fieldScale" min="40" max="200" step="1" value="100" disabled>
             <output id="fieldScaleOut">100%</output>
@@ -135,7 +156,15 @@
           <label>Papier
             <select id="optPaper"><option value="A4">A4</option><option value="A3">A3</option></select>
           </label>
-          <label>Rand zum Blattrand (mm)
+          <label>Rand zum Blattrand
+            <select id="optMarginPreset">
+              <option value="0">Randlos (0 mm)</option>
+              <option value="3">Wenig Rand (3 mm)</option>
+              <option value="5">Standard-Drucker (5 mm)</option>
+              <option value="custom">Eigener Wert …</option>
+            </select>
+          </label>
+          <label>Eigener Rand (mm)
             <input type="number" id="optMargin" min="0" max="30" step="0.5" value="0">
           </label>
           <label>Abstand zwischen Schildern (mm)
@@ -143,6 +172,9 @@
           </label>
           <label class="check"><input type="checkbox" id="optRotate" checked> Schilder drehen erlaubt (spart Platz)</label>
           <label class="check"><input type="checkbox" id="optCut" checked> Schnittkanten (feine graue Linie)</label>
+          <label class="check"><input type="checkbox" id="optShrink" checked> Bei Bedarf leicht verkleinern (max. 5 %), damit mehr aufs Blatt passt</label>
+          <div class="muted" style="font-size:12px">Diese Einstellungen gelten für alle, die den Schildgenerator nutzen.</div>
+          <button class="btn btn-sm" type="button" id="btnTestPage" title="Testseite mit Linealen, um Druckgröße und Druckrand zu prüfen">Drucker-Testseite (PDF)</button>
           <div class="print-summary" id="printSummary"></div>
           <div class="print-warn" id="printWarn"></div>
         </div>
@@ -152,6 +184,36 @@
         <button class="btn" value="cancel">Abbrechen</button>
         <button class="btn btn-primary" id="btnPdf" type="button">PDF herunterladen</button>
       </div>
+    </form>
+  </dialog>
+
+  <!-- Kamera-Scan -->
+  <dialog id="camDialog" class="modal cam-modal">
+    <form method="dialog" class="modal-inner">
+      <div class="modal-head">
+        <h2>Barcode scannen</h2>
+        <button class="icon-btn" value="cancel" aria-label="Schließen">✕</button>
+      </div>
+      <div class="cam-wrap"><video id="camVideo" playsinline muted></video><div class="cam-frame"></div></div>
+      <p class="muted" id="camHint" style="margin:0"></p>
+      <ul class="cam-list" id="camList"></ul>
+      <div class="modal-foot"><button class="btn btn-primary" value="ok">Fertig</button></div>
+    </form>
+  </dialog>
+
+  <!-- Preis-Wächter -->
+  <dialog id="watchDialog" class="modal">
+    <form method="dialog" class="modal-inner">
+      <div class="modal-head">
+        <h2>Preis-Wächter</h2>
+        <button class="icon-btn" value="cancel" aria-label="Schließen">✕</button>
+      </div>
+      <div class="watch-summary" id="watchSummary"></div>
+      <div class="btn-row">
+        <button class="btn" type="button" id="btnWatchRun">↻ Jetzt prüfen</button>
+        <button class="btn btn-primary" type="button" id="btnWatchReprintAll">Nachdrucken</button>
+      </div>
+      <ul class="set-list" id="watchList"></ul>
     </form>
   </dialog>
 
@@ -197,6 +259,7 @@
 
   <div class="toasts" id="toasts"></div>
 
+  <script src="/vendor/barcode-detector.js" defer></script>
   <script src="/js/templates.js"></script>
   <script src="/js/layout.js"></script>
   <script src="/js/app.js"></script>

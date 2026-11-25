@@ -95,5 +95,24 @@
     return { pages, tooBig, paper };
   }
 
-  window.SheetLayout = { arrange, PAPER };
+  /**
+   * Wie arrange, aber verkleinert die Schilder bei Bedarf leicht (bis maxShrink, z. B. 0.05 = 5 %),
+   * wenn dadurch weniger Blätter nötig sind – z. B. 2 × A5 auf A4 trotz Druckrand.
+   */
+  function arrangeBest(items, opt) {
+    const steps = [1];
+    if (opt.shrink) for (let p = 1; p <= Math.round((opt.maxShrink || 0.05) * 100); p++) steps.push(1 - p / 100);
+    let best = null;
+    for (const sc of steps) {
+      const scaled = items.map((it) => ({ ...it, w: it.w * sc, h: it.h * sc }));
+      const res = arrange(scaled, opt);
+      res.scale = sc;
+      const score = res.pages.length + res.tooBig.length * 1000;
+      if (!best || score < best.score) best = { res, score };
+      if (score <= Math.ceil(items.length ? 1 : 0)) break;
+    }
+    return best ? best.res : arrange(items, opt);
+  }
+
+  window.SheetLayout = { arrange, arrangeBest, PAPER };
 })();

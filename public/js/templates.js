@@ -59,11 +59,16 @@
       const d = tag.data || {};
       const L = tag.layout || {};
       const f = this.fields;
+      // Zweizeiliger Artikelname: Name wird eine Zeile höher, Art.Nr. und Eigenschaften rutschen nach unten
+      const LINE = 7.3;
+      const two = d.nameTwoLines === true;
+      const extra = { name: { dh: two ? LINE : 0 }, artnr: { dy: two ? LINE : 0 }, bullets: { dy: two ? LINE : 0, dh: two ? -LINE : 0 } };
       const pos = (id) => {
         const b = f[id];
         const o = L[id] || {};
+        const e = extra[id] || {};
         const s = o.s || 1;
-        return `left:${b.x + (o.dx || 0)}mm;top:${b.y + (o.dy || 0)}mm;width:${b.w}mm;height:${b.h}mm;` +
+        return `left:${b.x + (o.dx || 0)}mm;top:${b.y + (o.dy || 0) + (e.dy || 0)}mm;width:${b.w}mm;height:${b.h + (e.dh || 0)}mm;` +
           (s !== 1 ? `transform:scale(${s});transform-origin:top left;` : '');
       };
       const pct = savingsPercent(d.price, d.uvp);
@@ -81,7 +86,7 @@
   <div class="pt-f pt-qr" data-field="qr" style="${pos('qr')}">${qrSrc ? `<img src="${qrSrc}" alt="">` : ''}</div>
   <div class="pt-f pt-logo" data-field="logo" style="${pos('logo')}">${logoSrc ? `<img src="${logoSrc}" alt="">` : `<span class="pt-ph">Logo</span>`}</div>
   <div class="pt-f pt-group pt-fit1" data-field="group" style="${pos('group')}"><span>${esc(d.group)}</span></div>
-  <div class="pt-f pt-name pt-fit1" data-field="name" style="${pos('name')}"><span>${esc(d.name)}</span></div>
+  <div class="pt-f pt-name ${two ? 'pt-name-2 pt-fitn' : 'pt-fit1'}" data-field="name" style="${pos('name')}">${two ? esc(d.name) : `<span>${esc(d.name)}</span>`}</div>
   <div class="pt-f pt-artnr" data-field="artnr" style="${pos('artnr')}">${d.artnr ? 'Art.Nr.: ' + esc(d.artnr) : ''}</div>
   <div class="pt-f pt-bullets pt-fitn" data-field="bullets" style="${pos('bullets')}"><ul>${bullets.map((b) => `<li>${esc(b).replace(/(\S+-\S+)/g, '<span class="nb">$1</span>')}</li>`).join('')}</ul></div>
   <div class="pt-f pt-uvp" data-field="uvp" style="${pos('uvp')}${showUvp ? '' : 'visibility:hidden;'}">

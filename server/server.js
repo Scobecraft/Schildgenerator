@@ -15,12 +15,15 @@ const QRCode = require('qrcode');
 const { lookup, getBrowser, closeBrowser, STORE_ID } = require('./expert');
 const { prepareLogo } = require('./logo');
 const system = require('./system');
+const watch = require('./watch');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0'; // auf dem Server: 127.0.0.1 (nur über nginx erreichbar)
 const app = express();
 app.use(express.json({ limit: '60mb' }));
-app.use(express.static(path.join(__dirname, '..', 'public')));
+app.use(express.static(path.join(__dirname, '..', 'public'), {
+  setHeaders: (res, file) => { if (file.endsWith('.wasm')) res.type('application/wasm'); },
+}));
 
 // ---------- Logo-Bibliothek (hochauflösende PNGs pro Marke) ----------
 const LOGO_DIR = path.join(__dirname, '..', 'data', 'logos');
@@ -133,21 +136,77 @@ app.get('/api/sets/:id', (req, res) => {
   res.type('json').send(fs.readFileSync(setFile(req.params.id), 'utf8'));
 });
 
+function readSet(id) {
+  try { return JSON.parse(fs.readFileSync(setFile(id), 'utf8')); } catch (_) { return null; }
+}
+
+// Kleine Abfrage für den Live-Abgleich: hat sich das Set geändert?
+app.get('/api/sets/:id/version', (req, res) => {
+  if (!validSetId(req.params.id)) return res.status(400).json({ error: 'Ungültiges Set.' });
+  const s = readSet(req.params.id);
+  res.set('Cache-Control', 'no-store').json({ exists: Boolean(s), version: s ? (s.version || 0) : 0 });
+});
+
+// Speichern mit Versionsprüfung: Wer auf einem veralteten Stand speichert, bekommt 409
+// und den aktuellen Stand zurück – der Browser führt dann beide zusammen.
 app.put('/api/sets/:id', (req, res) => {
   const id = req.params.id;
   const b = req.body || {};
   if (!validSetId(id) || b.id !== id || !Array.isArray(b.tags)) return res.status(400).json({ error: 'Ungültiges Set.' });
-  const set = { id, name: String(b.name || '').slice(0, 100), createdAt: b.createdAt, updatedAt: new Date().toISOString(), tags: b.tags };
+  const cur = readSet(id);
+  const curVersion = cur ? (cur.version || 0) : 0;
+  const base = b.baseVersion == null ? null : Number(b.baseVersion);
+  if ((base == null && cur) || (base != null && base !== curVersion)) {
+    return res.status(409).json({ error: 'Das Set wurde inzwischen woanders geändert.', set: cur });
+  }
+  const deleted = (b.deleted && typeof b.deleted === 'object') ? b.deleted : {};
+  const set = {
+    id, name: String(b.name || '').slice(0, 100), createdAt: b.createdAt, updatedAt: new Date().toISOString(),
+    version: curVersion + 1, tags: b.tags, deleted,
+  };
   const tmp = setFile(id) + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(set));
   fs.renameSync(tmp, setFile(id)); // atomar: nie halb geschriebene Dateien
-  res.json({ ok: true, updatedAt: set.updatedAt });
+  res.json({ ok: true, updatedAt: set.updatedAt, version: set.version });
 });
 
 app.delete('/api/sets/:id', (req, res) => {
   if (validSetId(req.params.id) && fs.existsSync(setFile(req.params.id))) fs.unlinkSync(setFile(req.params.id));
   res.json({ ok: true });
 });
+
+// ---------- Gemeinsame Einstellungen (z. B. Druckrand für den Drucker im Laden) ----------
+const SETTINGS_FILE = path.join(__dirname, '..', 'data', 'settings.json');
+const readSettings = () => { try { return JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')); } catch (_) { return {}; } };
+app.get('/api/settings', (req, res) => res.set('Cache-Control', 'no-store').json(readSettings()));
+app.put('/api/settings', (req, res) => {
+  const b = req.body || {};
+  const cur = readSettings();
+  if (b.print && typeof b.print === 'object') {
+    const p = b.print;
+    cur.print = {
+      paper: ['A4', 'A3'].includes(p.paper) ? p.paper : 'A4',
+      margin: Math.max(0, Math.min(30, Number(p.margin) || 0)),
+      gap: Math.max(0, Math.min(20, Number(p.gap) || 0)),
+      rotate: p.rotate !== false, cut: p.cut !== false, shrink: p.shrink !== false,
+    };
+  }
+  fs.mkdirSync(path.dirname(SETTINGS_FILE), { recursive: true });
+  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(cur));
+  res.json(cur);
+});
+
+// ---------- Preis-Wächter ----------
+app.get('/api/watch', (req, res) => res.set('Cache-Control', 'no-store').json(watch.status()));
+app.post('/api/watch/run', (req, res) => {
+  watch.runCheck().catch((e) => console.error('Preis-Wächter:', e.message));
+  res.json({ ok: true });
+});
+app.post('/api/watch/remove', (req, res) => {
+  watch.remove((req.body || {}).keys);
+  res.json({ ok: true });
+});
+watch.startSchedule();
 
 app.get('/api/system', (req, res) => {
   res.set('Cache-Control', 'no-store').json(system.snapshot());
@@ -226,6 +285,8 @@ app.get('/print/:id', (req, res) => {
 app.post('/api/pdf', async (req, res) => {
   const html = req.body && req.body.html;
   if (!html) return res.status(400).json({ error: 'Kein Inhalt' });
+  const printed = req.body.printed;
+  const setInfo = req.body.set;
   const id = crypto.randomUUID();
   printJobs.set(id, html);
   const browser = await getBrowser();
@@ -235,6 +296,7 @@ app.post('/api/pdf', async (req, res) => {
     await page.evaluate(() => document.fonts.ready);
     await page.evaluate(() => window.__fitAll && window.__fitAll());
     const pdf = await page.pdf({ preferCSSPageSize: true, printBackground: true });
+    try { watch.registerPrinted(printed, setInfo); } catch (e) { console.error('Preis-Wächter:', e.message); }
     res.type('application/pdf').set('Content-Disposition', `attachment; filename="preisschilder-${new Date().toISOString().slice(0, 10)}.pdf"`).send(pdf);
   } catch (e) {
     res.status(500).json({ error: 'PDF konnte nicht erstellt werden: ' + e.message });
