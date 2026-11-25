@@ -3,6 +3,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/Scobecraft/schildgenerator/main/install.sh | bash
 # Erneut ausführen = auf die neueste Version aktualisieren.
 set -e
+cd "$HOME" 2>/dev/null || cd /   # falls das aktuelle Verzeichnis gelöscht wurde
 
 REPO="https://github.com/Scobecraft/schildgenerator.git"
 DIR="${SCHILD_DIR:-$HOME/schildgenerator}"
