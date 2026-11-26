@@ -86,11 +86,15 @@ Pro Schild umschaltbar zwischen **Original** (Standard) und **Hochskaliert**. Ho
 Die Seite ist nur mit **Benutzername und Passwort** nutzbar.
 
 - **Erster Aufruf:** Gibt es noch kein Konto, zeigt die Anmeldeseite „Erstes Konto anlegen“. Dieses Konto ist Administrator.
-  → Das erste Konto direkt nach der Installation anlegen, **bevor** die Seite (z. B. über Cloudflare) öffentlich erreichbar ist.
+  Direkt aus dem eigenen Netz geht das ohne Weiteres. Kommt der Aufruf über einen Proxy/das Internet (z. B. Cloudflare),
+  wird zusätzlich ein **Einrichtungscode** verlangt. Er steht im Server-Protokoll: `docker compose logs schildgenerator`.
+- Ist `data/users.json` beschädigt, ist die Anmeldung komplett gesperrt (es kann dann auch kein neues Admin-Konto angelegt werden).
 - **Konto-Knopf** oben rechts: abmelden, eigenes Passwort ändern. Administratoren legen dort weitere Benutzer an, setzen Passwörter, vergeben Admin-Rechte und löschen Benutzer.
 - Angemeldet bleibt man 30 Tage (verlängert sich bei Nutzung). Nach einer Passwortänderung sind alle anderen Geräte dieses Kontos abgemeldet.
 - Schutz gegen Durchprobieren: 15 Minuten Sperre nach 8 falschen Passwörtern für einen Benutzernamen (bzw. 30 von einer Adresse).
-- Passwörter werden nur als scrypt-Hash gespeichert (`data/users.json`), Sitzungen in `data/sessions.json`.
+- Passwörter werden nur als scrypt-Hash gespeichert (`data/users.json`), Sitzungen in `data/sessions.json` (nur Hashes der Sitzungsschlüssel).
+- Weitere Schutzmaßnahmen: Pfad-Tricks (`..`, kodierte Zeichen) werden abgewiesen, Änderungen nur von der eigenen Seite (Origin-Prüfung),
+  kein Einbetten in fremde Seiten, keine internen Fehlerdetails nach außen, große Anfragen erst nach der Anmeldung.
 
 **Passwort vergessen?** Auf dem Server im Ordner `~/schildgenerator`:
 

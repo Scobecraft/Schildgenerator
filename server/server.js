@@ -21,10 +21,11 @@ const auth = require('./auth');
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0'; // auf dem Server: 127.0.0.1 (nur über nginx erreichbar)
 const app = express();
+app.disable('x-powered-by');
 app.set('trust proxy', 'loopback'); // hinter nginx/Cloudflare-Tunnel: https-Erkennung für das Cookie
-app.use(express.json({ limit: '60mb' }));
-// Anmeldung: alles außer der Anmeldeseite braucht ein gültiges Konto
+// Anmeldung: alles außer der Anmeldeseite braucht ein gültiges Konto (Prüfung VOR dem Einlesen großer Anfragen)
 app.use(auth.middleware);
+app.use((req, res, next) => (req.user ? express.json({ limit: '60mb' }) : express.json({ limit: '10kb' }))(req, res, next));
 auth.routes(app);
 app.use(express.static(path.join(__dirname, '..', 'public'), {
   setHeaders: (res, file) => {
@@ -322,7 +323,16 @@ app.post('/api/pdf', async (req, res) => {
   }
 });
 
+// Fehler: keine internen Details (Dateipfade, Stacktrace) nach außen geben
+app.use((req, res) => res.status(404).type('text').send('Nicht gefunden'));
+app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
+  if (err && err.status >= 400 && err.status < 500) return res.status(err.status).json({ error: err.status === 413 ? 'Anfrage zu groß.' : 'Ungültige Anfrage.' });
+  console.error('Fehler:', err && err.message);
+  res.status(500).json({ error: 'Interner Fehler.' });
+});
+
 const httpServer = app.listen(PORT, HOST, () => {
+  auth.announceSetup();
   console.log(`Schildgenerator läuft auf http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`);
 });
 httpServer.on('error', (e) => {

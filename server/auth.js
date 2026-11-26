@@ -18,6 +18,8 @@ const MAX_FAILS = { u: 8, ip: 30 };
 const LOCK_MS = 15 * 60 * 1000;
 // Für den eigenen Druck-Browser (PDF): bei jedem Start neu, verlässt den Server nie
 const INTERNAL_TOKEN = crypto.randomBytes(32).toString('hex');
+// Einrichtungscode für das erste Konto, falls die Seite schon über das Internet erreichbar ist
+const SETUP_CODE = crypto.randomBytes(5).toString('hex').toUpperCase();
 
 fs.mkdirSync(DATA, { recursive: true });
 
@@ -33,9 +35,28 @@ function writeJson(file, obj) {
 // ---------- Benutzer ----------
 const normName = (n) => String(n || '').trim();
 const key = (n) => normName(n).toLowerCase();
-function loadUsers() { return readJson(USERS_FILE, { users: [] }).users || []; }
+// Fehlt die Datei, gibt es noch keine Benutzer. Ist sie vorhanden, aber unlesbar/kaputt, wird NICHT
+// "keine Benutzer" angenommen (sonst könnte jemand ein neues Admin-Konto anlegen) – dann geht gar nichts.
+let usersBroken = false;
+function loadUsers() {
+  let raw;
+  try { raw = fs.readFileSync(USERS_FILE, 'utf8'); } catch (e) {
+    if (e.code === 'ENOENT') { usersBroken = false; return []; }
+    usersBroken = true; return [];
+  }
+  try {
+    const j = JSON.parse(raw);
+    if (!j || !Array.isArray(j.users)) throw new Error('Format');
+    usersBroken = false;
+    return j.users;
+  } catch (e) {
+    if (!usersBroken) console.error('ACHTUNG: data/users.json ist beschädigt – Anmeldung gesperrt, bis die Datei repariert ist.');
+    usersBroken = true;
+    return [];
+  }
+}
 function saveUsers(users) { writeJson(USERS_FILE, { users }); }
-function hasUsers() { return loadUsers().length > 0; }
+function hasUsers() { return loadUsers().length > 0 || usersBroken; }
 function findUser(name) { return loadUsers().find((u) => key(u.name) === key(name)) || null; }
 
 function hashPassword(pw, salt = crypto.randomBytes(16).toString('hex')) {
@@ -62,6 +83,7 @@ function addUser(name, pw, admin = false) {
   const err = validate(name, pw);
   if (err) throw new Error(err);
   const users = loadUsers();
+  if (usersBroken) throw new Error('data/users.json ist beschädigt.');
   if (users.some((u) => key(u.name) === key(name))) throw new Error('Diesen Benutzer gibt es schon.');
   users.push({ name: normName(name), ...hashPassword(pw), admin: !!admin, created: new Date().toISOString(), pwChanged: Date.now() });
   saveUsers(users);
@@ -124,7 +146,8 @@ function parseCookies(req) {
   const out = {};
   for (const part of String(req.headers.cookie || '').split(';')) {
     const i = part.indexOf('=');
-    if (i > 0) out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim());
+    if (i <= 0) continue;
+    try { out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim()); } catch (_) { /* kaputtes Cookie ignorieren */ }
   }
   return out;
 }
@@ -136,10 +159,11 @@ function setCookie(req, res, token, maxAgeMs) {
 }
 
 function currentUser(req) {
-  if (req.headers['x-internal-token'] === INTERNAL_TOKEN) return { name: 'intern', admin: false, internal: true };
+  const it = req.headers['x-internal-token'];
+  if (typeof it === 'string' && it.length === INTERNAL_TOKEN.length && crypto.timingSafeEqual(Buffer.from(it), Buffer.from(INTERNAL_TOKEN))) return { name: 'intern', admin: false, internal: true };
   const token = parseCookies(req)[COOKIE];
-  if (!token) return null;
-  const s = sessions[tokenKey(token)];
+  if (!token || !/^[0-9a-f]{64}$/.test(token)) return null;
+  const s = Object.prototype.hasOwnProperty.call(sessions, tokenKey(token)) ? sessions[tokenKey(token)] : null;
   if (!s) return null;
   const now = Date.now();
   if (now - s.seen > SESSION_MS) { delete sessions[tokenKey(token)]; saveSessionsSoon(); return null; }
@@ -152,8 +176,20 @@ function currentUser(req) {
 
 // ---------- Fehlversuche ----------
 const fails = new Map(); // key -> {n, until}
+const isPrivate = (ip) => /^(::1|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|fc|fd|::ffff:(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.))/i.test(String(ip || ''));
 function clientIp(req) {
-  return String(req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+  const peer = req.socket.remoteAddress || '';
+  // Kopfzeilen kann jeder fälschen – nur glauben, wenn ein Proxy im eigenen Netz (nginx, Cloudflare-Tunnel) sie setzt
+  if (isPrivate(peer)) {
+    const fwd = String(req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+    if (fwd) return fwd;
+  }
+  return peer;
+}
+// Direkt aus dem eigenen Netz, ohne Proxy dazwischen (für das Anlegen des ersten Kontos)
+function isDirectLocal(req) {
+  const h = req.headers;
+  return isPrivate(req.socket.remoteAddress) && !h['x-forwarded-for'] && !h['cf-connecting-ip'] && !h['x-real-ip'] && !h.forwarded && !h['cf-ray'];
 }
 function locked(keys) {
   const now = Date.now();
@@ -171,15 +207,41 @@ function noteFail(keys) {
     fails.set(k, f);
   }
 }
+setInterval(() => { const now = Date.now(); for (const [k, f] of fails) if (f.until < now && f.n === 0) fails.delete(k); }, 30 * 60 * 1000).unref();
 
 // ---------- Express ----------
 // Ohne Anmeldung erreichbar: Anmeldeseite und was sie zum Anzeigen braucht
-const OPEN = [/^\/login(\.html)?$/, /^\/api\/(login|setup|auth-state)$/, /^\/css\/app\.css$/, /^\/fonts\//, /^\/favicon/];
+const OPEN = [/^\/login(\.html)?$/, /^\/api\/(login|setup|auth-state)$/, /^\/css\/app\.css$/, /^\/fonts\/[a-z0-9-]+\.woff2$/];
+function isOpen(req) {
+  if (req.method !== 'GET' && req.method !== 'HEAD' && req.method !== 'POST') return false;
+  let p;
+  try { p = decodeURIComponent(req.path); } catch (_) { return false; }
+  // Pfade mit Tricks ("..", "\", doppelt kodiert, Steuerzeichen) sind nie offen
+  if (p !== req.path || /\.\.|\\|%|[\x00-\x1f]/.test(req.path)) return false;
+  return OPEN.some((re) => re.test(p));
+}
+
+// Sicherheits-Kopfzeilen für alle Antworten
+function securityHeaders(res) {
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.set('X-Frame-Options', 'DENY');
+  res.set('Content-Security-Policy', "frame-ancestors 'none'");
+  res.set('Referrer-Policy', 'same-origin');
+}
+
+// Änderungen nur von der eigenen Seite (Schutz gegen fremde Seiten, die im Namen des Nutzers etwas abschicken)
+function sameOrigin(req) {
+  const o = req.headers.origin;
+  if (!o) return true; // z. B. curl – Anmeldung ist trotzdem nötig
+  try { return new URL(o).host === req.headers.host; } catch (_) { return false; }
+}
 
 function middleware(req, res, next) {
+  securityHeaders(res);
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && !sameOrigin(req)) return res.status(403).json({ error: 'Anfrage von fremder Seite abgelehnt.' });
   const u = currentUser(req);
   if (u) { req.user = u; return next(); }
-  if (OPEN.some((re) => re.test(req.path))) return next();
+  if (isOpen(req)) return next();
   if (req.path.startsWith('/api/') || req.method !== 'GET') return res.status(401).json({ error: 'Bitte anmelden.', login: true });
   const nextUrl = req.originalUrl && req.originalUrl !== '/' ? '?next=' + encodeURIComponent(req.originalUrl) : '';
   return res.redirect('/login' + nextUrl);
@@ -197,12 +259,23 @@ function routes(app) {
   });
   app.get('/api/auth-state', (req, res) => {
     const u = currentUser(req);
-    res.set('Cache-Control', 'no-store').json({ setup: !hasUsers(), user: u && !u.internal ? publicUser(u) : null });
+    const setup = !hasUsers();
+    if (setup) announceSetup(); // Code (erneut) ins Server-Protokoll schreiben
+    res.set('Cache-Control', 'no-store').json({ setup, needCode: setup && !isDirectLocal(req), broken: usersBroken, user: u && !u.internal ? publicUser(u) : null });
   });
 
   app.post('/api/setup', (req, res) => {
     if (hasUsers()) return res.status(409).json({ error: 'Es gibt schon ein Konto. Bitte anmelden.' });
-    const { name, password } = req.body || {};
+    const { name, password, code } = req.body || {};
+    if (typeof name !== 'string' || typeof password !== 'string') return res.status(400).json({ error: 'Ungültige Eingabe.' });
+    if (!isDirectLocal(req)) {
+      const ok = typeof code === 'string' && code.trim().length === SETUP_CODE.length &&
+        crypto.timingSafeEqual(Buffer.from(code.trim().toUpperCase()), Buffer.from(SETUP_CODE));
+      if (!ok) {
+        noteFail(['ip:' + clientIp(req)]);
+        return res.status(403).json({ error: 'Einrichtungscode fehlt oder ist falsch. Er steht im Server-Protokoll (docker compose logs schildgenerator).', needCode: true });
+      }
+    }
     try { addUser(name, password, true); } catch (e) { return res.status(400).json({ error: e.message }); }
     setCookie(req, res, createSession(normName(name)), SESSION_MS);
     console.log(`Erstes Konto angelegt: ${normName(name)} (Administrator)`);
@@ -211,6 +284,9 @@ function routes(app) {
 
   app.post('/api/login', (req, res) => {
     const { name, password } = req.body || {};
+    if (typeof name !== 'string' || typeof password !== 'string' || name.length > 100 || password.length > 1000) {
+      return res.status(400).json({ error: 'Benutzername oder Passwort ist falsch.' });
+    }
     const keys = ['u:' + key(name), 'ip:' + clientIp(req)];
     const wait = locked(keys);
     if (wait) return res.status(429).json({ error: `Zu viele Fehlversuche. Bitte in ${wait} Minute${wait === 1 ? '' : 'n'} erneut versuchen.` });
@@ -235,6 +311,7 @@ function routes(app) {
 
   app.post('/api/password', (req, res) => {
     const { current, password } = req.body || {};
+    if (typeof current !== 'string' || typeof password !== 'string') return res.status(400).json({ error: 'Ungültige Eingabe.' });
     const u = findUser(req.user.name);
     if (!checkPassword(u, current || '')) return res.status(400).json({ error: 'Das aktuelle Passwort stimmt nicht.' });
     try { setPassword(u.name, password); } catch (e) { return res.status(400).json({ error: e.message }); }
@@ -246,15 +323,18 @@ function routes(app) {
   app.get('/api/users', adminOnly, (req, res) => res.set('Cache-Control', 'no-store').json(loadUsers().map(publicUser)));
   app.post('/api/users', adminOnly, (req, res) => {
     const { name, password, admin } = req.body || {};
-    try { addUser(name, password, admin); } catch (e) { return res.status(400).json({ error: e.message }); }
+    if (typeof name !== 'string' || typeof password !== 'string') return res.status(400).json({ error: 'Ungültige Eingabe.' });
+    try { addUser(name, password, admin === true); } catch (e) { return res.status(400).json({ error: e.message }); }
     res.json({ ok: true });
   });
   app.post('/api/users/:name/password', adminOnly, (req, res) => {
-    try { setPassword(req.params.name, (req.body || {}).password); } catch (e) { return res.status(400).json({ error: e.message }); }
+    const pw = (req.body || {}).password;
+    if (typeof pw !== 'string') return res.status(400).json({ error: 'Ungültige Eingabe.' });
+    try { setPassword(req.params.name, pw); } catch (e) { return res.status(400).json({ error: e.message }); }
     res.json({ ok: true });
   });
   app.post('/api/users/:name/admin', adminOnly, (req, res) => {
-    try { setAdmin(req.params.name, (req.body || {}).admin); } catch (e) { return res.status(400).json({ error: e.message }); }
+    try { setAdmin(req.params.name, (req.body || {}).admin === true); } catch (e) { return res.status(400).json({ error: e.message }); }
     res.json({ ok: true });
   });
   app.delete('/api/users/:name', adminOnly, (req, res) => {
@@ -264,4 +344,15 @@ function routes(app) {
   });
 }
 
-module.exports = { middleware, routes, INTERNAL_TOKEN, addUser, setPassword, removeUser, setAdmin, loadUsers, publicUser, hasUsers };
+let lastAnnounce = 0;
+function announceSetup() {
+  if (!hasUsers() && !usersBroken && Date.now() - lastAnnounce > 60 * 1000) {
+    lastAnnounce = Date.now();
+    console.log('==============================================================');
+    console.log(' Noch kein Konto. Erstes Konto auf der Anmeldeseite anlegen.');
+    console.log(` Einrichtungscode (nur nötig, wenn nicht direkt im eigenen Netz): ${SETUP_CODE}`);
+    console.log('==============================================================');
+  }
+}
+
+module.exports = { announceSetup, middleware, routes, INTERNAL_TOKEN, addUser, setPassword, removeUser, setAdmin, loadUsers, publicUser, hasUsers };

@@ -51,6 +51,10 @@
       <label for="pw2">Passwort wiederholen</label>
       <input id="pw2" type="password" autocomplete="new-password">
     </div>
+    <div id="codewrap" hidden>
+      <label for="code">Einrichtungscode</label>
+      <input id="code" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="steht im Server-Protokoll">
+    </div>
     <button class="btn btn-primary" id="submit" type="submit">Anmelden</button>
     <div class="err" id="err" role="alert"></div>
     <div class="hint" id="hint"></div>
@@ -62,10 +66,17 @@
       function showErr(msg) { $('err').textContent = msg; $('err').classList.add('show'); }
       function goNext() {
         var n = new URLSearchParams(location.search).get('next') || '/';
-        location.replace(/^\/(?!\/)/.test(n) ? n : '/'); // nur Ziele auf dieser Seite
+        // nur Ziele auf dieser Seite (keine Umleitung auf fremde Seiten, auch nicht über "//" oder "/\\")
+        var ok = /^\/[^\/\\]/.test(n) || n === '/';
+        try { ok = ok && new URL(n, location.origin).origin === location.origin; } catch (e) { ok = false; }
+        location.replace(ok ? n : '/');
       }
       fetch('/api/auth-state', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (s) {
         if (s.user) return goNext();
+        if (s.broken) {
+          $('lead').textContent = 'Die Benutzerdatei auf dem Server ist beschädigt. Anmelden ist gesperrt, bis sie repariert ist (siehe README).';
+          $('submit').disabled = true;
+        }
         if (s.setup) {
           setup = true;
           $('title').textContent = 'Erstes Konto anlegen';
@@ -74,6 +85,10 @@
           $('pw').setAttribute('autocomplete', 'new-password');
           $('submit').textContent = 'Konto anlegen';
           $('hint').textContent = 'Passwort: mindestens 8 Zeichen.';
+          if (s.needCode) {
+            $('codewrap').hidden = false;
+            $('hint').textContent = 'Passwort: mindestens 8 Zeichen. Den Einrichtungscode zeigt der Server beim Start an: docker compose logs schildgenerator';
+          }
         }
         $('name').focus();
       });
@@ -84,7 +99,7 @@
         $('submit').disabled = true;
         fetch(setup ? '/api/setup' : '/api/login', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: $('name').value, password: $('pw').value }),
+          body: JSON.stringify({ name: $('name').value, password: $('pw').value, code: $('code').value }),
         }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
           .then(function (res) {
             if (res.ok) return goNext();
