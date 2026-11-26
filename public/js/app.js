@@ -30,8 +30,10 @@
     const d = new Date();
     return { id: d.toISOString().replace(/[:.]/g, '-') + '-' + Math.random().toString(36).slice(2, 8), name: setName(d), createdAt: d.toISOString(), version: 0, deleted: {} };
   }
-  // Bei jedem Laden der Seite beginnt ein neues Set
+  // Das aktuelle Set gehört zum Konto: beim Start wird es vom Server geholt (siehe "Start" unten),
+  // damit Handy und PC dieselben Schilder sehen. Bis dahin ein leeres Platzhalter-Set.
   let currentSet = makeSet();
+  let setReady = false;
 
   // Abrufe, die vor mehr als 2 Minuten begonnen wurden, gelten als abgebrochen
   // (jüngere laufen vielleicht gerade auf einem anderen Gerät)
@@ -219,13 +221,49 @@
     return savePromise;
   }
 
+  // Dem Server sagen, welches Set auf diesem Konto gerade das aktuelle ist (alle Geräte folgen)
+  function announceCurrent() {
+    return fetch('/api/sets/current', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: currentSet.id, name: currentSet.name, createdAt: currentSet.createdAt }) }).catch(() => {});
+  }
+
+  // Ein Set anzeigen, ohne vorher zu speichern (Start bzw. Wechsel durch ein anderes Gerät)
+  function showSet(set) {
+    markInterrupted(set.tags || []);
+    currentSet = { id: set.id, name: set.name, createdAt: set.createdAt, version: set.version || 0, deleted: set.deleted || {} };
+    state.tags = set.tags || [];
+    state.selectedId = state.tags[0] ? state.tags[0].id : null;
+    selectedField = null;
+    rememberSynced();
+    resetHistory();
+    renderAll();
+  }
+
+  // Das aktuelle Set des Kontos laden (beim Start und wenn ein anderes Gerät das Set wechselt)
+  async function followCurrent(cur, note) {
+    if (cur.exists) {
+      const set = await api('/api/sets/' + encodeURIComponent(cur.id));
+      showSet(set);
+    } else {
+      showSet({ id: cur.id, name: cur.name, createdAt: cur.createdAt, version: 0, deleted: {}, tags: [] });
+    }
+    if (note) toast(note, 'ok');
+  }
+
   // Live-Abgleich: Änderungen von anderen Geräten (z. B. Handy-Scans) übernehmen
   async function pollSet() {
-    if (document.hidden || savePending || !currentSet.version) return;
+    if (document.hidden || savePending || !setReady) return;
     const set = currentSet;
     try {
-      const v = await api('/api/sets/' + set.id + '/version');
-      if (set !== currentSet || savePending || !v.exists || v.version <= set.version) return;
+      const cur = await api('/api/sets/current', { cache: 'no-store' });
+      if (set !== currentSet || savePending) return;
+      // Anderes Gerät hat ein anderes Set aktiv gemacht -> folgen (eigene Änderungen sind schon gespeichert)
+      if (cur && cur.id !== set.id) {
+        await followCurrent(cur, `Set „${cur.name}“ wurde auf einem anderen Gerät geöffnet – hier ebenfalls.`);
+        return;
+      }
+      if (!cur) { announceCurrent(); return; }
+      const v = { exists: cur.exists, version: cur.version };
+      if (!v.exists || v.version <= set.version) return;
       const remote = await api('/api/sets/' + set.id);
       if (set !== currentSet || savePending) return;
       applyRemote(remote);
@@ -1555,6 +1593,7 @@ ${pages.map((p) => sheetHtml(p, opt)).join('\n')}
     rememberSynced();
     resetHistory();
     renderAll();
+    announceCurrent();
   }
 
   async function newSet() {
@@ -1566,6 +1605,7 @@ ${pages.map((p) => sheetHtml(p, opt)).join('\n')}
     rememberSynced();
     resetHistory();
     renderAll();
+    announceCurrent();
     toast('Neues Set begonnen: ' + currentSet.name, 'ok');
   }
 
@@ -1593,7 +1633,7 @@ ${pages.map((p) => sheetHtml(p, opt)).join('\n')}
         const name = b.closest('.set-row').querySelector('.set-row-name').firstChild.textContent.trim();
         if (!confirm(`Set „${name}“ endgültig löschen?`)) return;
         await api('/api/sets/' + encodeURIComponent(id), { method: 'DELETE' });
-        if (id === currentSet.id) { currentSet = makeSet(); state.tags = []; state.selectedId = null; rememberSynced(); resetHistory(); renderAll(); }
+        if (id === currentSet.id) { currentSet = makeSet(); state.tags = []; state.selectedId = null; rememberSynced(); resetHistory(); renderAll(); announceCurrent(); }
         renderSetList();
       }
     } catch (err) { toast(err.message, 'err'); }
@@ -1781,4 +1821,16 @@ ${pages.map((p) => sheetHtml(p, opt)).join('\n')}
   $('#btnRedo').addEventListener('click', redo);
   document.fonts.ready.then(renderAll);
   renderAll();
+
+  // Aktuelles Set des Kontos holen – gibt es keins, beginnt hier ein neues
+  (async () => {
+    try {
+      const cur = await api('/api/sets/current', { cache: 'no-store' });
+      if (cur && !state.tags.length) await followCurrent(cur);
+      else announceCurrent();
+    } catch (_) {
+      announceCurrent();
+    }
+    setReady = true;
+  })();
 })();

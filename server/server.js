@@ -92,6 +92,18 @@ app.delete('/api/logos/:brand', (req, res) => {
 // ---------- Sets (Sammlungen von Preisschildern, auf dem Server gespeichert) ----------
 const SET_DIR = path.join(__dirname, '..', 'data', 'sets');
 fs.mkdirSync(SET_DIR, { recursive: true });
+// Sets gehören einem Konto. Alte Sets aus der Zeit vor den Konten (ohne Besitzer) sehen nur Administratoren;
+// beim nächsten Speichern gehören sie dann dem Administrator, der sie gespeichert hat.
+const userKey = (req) => String(req.user && req.user.name || '').toLowerCase();
+const ownsSet = (req, s) => Boolean(s) && (s.owner ? String(s.owner).toLowerCase() === userKey(req) : Boolean(req.user && req.user.admin));
+// Aktuelles Set je Konto (damit Handy und PC am selben Set arbeiten)
+const CURRENT_FILE = path.join(__dirname, '..', 'data', 'current-sets.json');
+const readCurrent = () => { try { return JSON.parse(fs.readFileSync(CURRENT_FILE, 'utf8')); } catch (_) { return {}; } };
+function writeCurrent(obj) {
+  const tmp = CURRENT_FILE + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(obj));
+  fs.renameSync(tmp, CURRENT_FILE);
+}
 const validSetId = (id) => /^[A-Za-z0-9_-]{6,80}$/.test(String(id || ''));
 const setFile = (id) => path.join(SET_DIR, id + '.json');
 
@@ -127,6 +139,7 @@ app.get('/api/sets', (req, res) => {
     if (!f.endsWith('.json')) continue;
     try {
       const s = JSON.parse(fs.readFileSync(path.join(SET_DIR, f), 'utf8'));
+      if (!ownsSet(req, s)) continue;
       const tags = Array.isArray(s.tags) ? s.tags : [];
       list.push({
         id: s.id, name: s.name, createdAt: s.createdAt, updatedAt: s.updatedAt,
@@ -141,19 +154,42 @@ app.get('/api/sets', (req, res) => {
   res.json(list);
 });
 
-app.get('/api/sets/:id', (req, res) => {
-  if (!validSetId(req.params.id) || !fs.existsSync(setFile(req.params.id))) return res.status(404).json({ error: 'Set nicht gefunden.' });
-  res.type('json').send(fs.readFileSync(setFile(req.params.id), 'utf8'));
-});
-
 function readSet(id) {
   try { return JSON.parse(fs.readFileSync(setFile(id), 'utf8')); } catch (_) { return null; }
 }
 
+// Aktuelles Set des Kontos: { id, name, createdAt, version, exists } oder null
+app.get('/api/sets/current', (req, res) => {
+  const cur = readCurrent()[userKey(req)];
+  res.set('Cache-Control', 'no-store');
+  if (!cur || !validSetId(cur.id)) return res.json(null);
+  const s = readSet(cur.id);
+  if (s && !ownsSet(req, s)) return res.json(null);
+  if (!s && Date.now() - (Date.parse(cur.at) || 0) > SET_KEEP_MS) return res.json(null); // längst abgelaufen
+  res.json({ id: cur.id, name: s ? s.name : cur.name, createdAt: s ? s.createdAt : cur.createdAt, version: s ? (s.version || 0) : 0, exists: Boolean(s) });
+});
+app.put('/api/sets/current', (req, res) => {
+  const b = req.body || {};
+  if (!validSetId(b.id)) return res.status(400).json({ error: 'Ungültiges Set.' });
+  const s = readSet(b.id);
+  if (s && !ownsSet(req, s)) return res.status(404).json({ error: 'Set nicht gefunden.' });
+  const all = readCurrent();
+  all[userKey(req)] = { id: b.id, name: String((s && s.name) || b.name || '').slice(0, 100), createdAt: (s && s.createdAt) || b.createdAt, at: new Date().toISOString() };
+  writeCurrent(all);
+  res.json({ ok: true });
+});
+
+app.get('/api/sets/:id', (req, res) => {
+  const s = validSetId(req.params.id) && readSet(req.params.id);
+  if (!s || !ownsSet(req, s)) return res.status(404).json({ error: 'Set nicht gefunden.' });
+  res.json(s);
+});
+
 // Kleine Abfrage für den Live-Abgleich: hat sich das Set geändert?
 app.get('/api/sets/:id/version', (req, res) => {
   if (!validSetId(req.params.id)) return res.status(400).json({ error: 'Ungültiges Set.' });
-  const s = readSet(req.params.id);
+  let s = readSet(req.params.id);
+  if (s && !ownsSet(req, s)) s = null;
   res.set('Cache-Control', 'no-store').json({ exists: Boolean(s), version: s ? (s.version || 0) : 0 });
 });
 
@@ -164,6 +200,7 @@ app.put('/api/sets/:id', (req, res) => {
   const b = req.body || {};
   if (!validSetId(id) || b.id !== id || !Array.isArray(b.tags)) return res.status(400).json({ error: 'Ungültiges Set.' });
   const cur = readSet(id);
+  if (cur && !ownsSet(req, cur)) return res.status(404).json({ error: 'Set nicht gefunden.' });
   const curVersion = cur ? (cur.version || 0) : 0;
   const base = b.baseVersion == null ? null : Number(b.baseVersion);
   if ((base == null && cur) || (base != null && base !== curVersion)) {
@@ -171,7 +208,7 @@ app.put('/api/sets/:id', (req, res) => {
   }
   const deleted = (b.deleted && typeof b.deleted === 'object') ? b.deleted : {};
   const set = {
-    id, name: String(b.name || '').slice(0, 100), createdAt: b.createdAt, updatedAt: new Date().toISOString(),
+    id, owner: (cur && cur.owner) || req.user.name, name: String(b.name || '').slice(0, 100), createdAt: b.createdAt, updatedAt: new Date().toISOString(),
     version: curVersion + 1, tags: b.tags, deleted,
   };
   const tmp = setFile(id) + '.tmp';
@@ -181,7 +218,9 @@ app.put('/api/sets/:id', (req, res) => {
 });
 
 app.delete('/api/sets/:id', (req, res) => {
-  if (validSetId(req.params.id) && fs.existsSync(setFile(req.params.id))) fs.unlinkSync(setFile(req.params.id));
+  const s = validSetId(req.params.id) && readSet(req.params.id);
+  if (s && !ownsSet(req, s)) return res.status(404).json({ error: 'Set nicht gefunden.' });
+  if (s) fs.unlinkSync(setFile(req.params.id));
   res.json({ ok: true });
 });
 

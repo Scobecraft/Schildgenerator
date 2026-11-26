@@ -62,7 +62,7 @@ Mehrere Geräte können dasselbe Set gleichzeitig bearbeiten. Änderungen werden
 ### Sets
 
 - Alle Schilder landen im **aktuellen Set**. Name = Datum und Uhrzeit beim Anlegen.
-- Bei jedem Neuladen der Seite beginnt ein neues Set, ein weiteres jederzeit über **+ Neues Set**.
+- Sets gehören zum **Konto**: Jedes Gerät, auf dem du angemeldet bist (Handy, PC …), zeigt dasselbe aktuelle Set – auf dem Handy gescannt, am PC sofort da. Öffnet oder beginnt ein Gerät ein anderes Set (**+ Neues Set**), folgen die anderen Geräte innerhalb weniger Sekunden. Andere Konten sehen deine Sets nicht.
 - **Alle Sets** zeigt die gespeicherten Sets: öffnen, komplett drucken oder löschen.
 - Sets liegen auf dem Server (`data/sets`) und gelten für alle Nutzer. Sie werden **48 Stunden nach der letzten Änderung automatisch gelöscht**. Leere Sets werden gar nicht gespeichert.
 
