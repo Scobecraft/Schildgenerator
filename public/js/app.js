@@ -601,13 +601,25 @@
   function renderStageDebounced() { clearTimeout(stageTimer); stageTimer = setTimeout(renderStage, 120); }
 
   // ---------------------------------------------------------------- Editor
-  function googleUvpUrl(t) {
+  // Suchbegriff für die UVP: Marke + Gerätename (nie EAN oder Artikelnummer)
+  function googleUvpQuery(t) {
     const m = t.meta || {};
-    const brand = m.brand || m.manufacturer || '';
-    const q = [brand, t.data.name || m.fullName || t.query, 'UVP Preis'].filter(Boolean).join(' ');
-    // udm=50 öffnet direkt den KI-Modus der Google-Suche
-    return 'https://www.google.com/search?udm=50&q=' + encodeURIComponent(q);
+    const d = t.data || {};
+    const brand = (d.brand || m.brand || m.manufacturer || '').trim();
+    let name = (d.nameFull || d.name || m.fullName || '').trim();
+    // Zahlenfolgen wie EAN/Artikelnummer (6+ Ziffern) und Klammern entfernen
+    name = name.replace(/\([^)]*\)/g, ' ').replace(/\b\d{6,}\b/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!name) return '';
+    const withBrand = brand && !name.toLowerCase().startsWith(brand.toLowerCase().split(' ')[0]) ? `${brand} ${name}` : name;
+    return `${withBrand} UVP Preis`;
   }
+  function openGoogleUvp(t) {
+    const q = googleUvpQuery(t);
+    if (!q) { toast('Für die Suche fehlt der Gerätename – bitte erst den Artikel abrufen oder den Namen eintragen.', 'err'); return; }
+    // udm=50 öffnet direkt den KI-Modus der Google-Suche
+    window.open('https://www.google.com/search?udm=50&q=' + encodeURIComponent(q), '_blank', 'noopener');
+  }
+
 
   function uvpBlock(t) {
     const u = (t.meta && t.meta.uvp) || {};
@@ -625,7 +637,7 @@
         </div>
         ${note ? `<div class="uvp-note">${esc(note)}</div>` : ''}
         <div class="btn-row" style="margin-top:8px">
-          <a class="btn btn-sm" href="${esc(googleUvpUrl(t))}" target="_blank" rel="noopener" title="Öffnet die Google-Suche im KI-Modus in einem neuen Tab">UVP bei Google suchen ↗</a>
+          <button class="btn btn-sm" type="button" data-do="googleUvp" title="Öffnet die Google-Suche (KI-Modus) mit Marke und Gerätename in einem neuen Tab">UVP bei Google suchen ↗</button>
           ${u.manual && t.meta && t.meta.fetchedAt ? '<button class="btn btn-sm" type="button" data-do="uvpReset">UVP von expert.de übernehmen</button>' : ''}
           <label class="check"><input type="checkbox" data-k="showUvp" ${t.data.showUvp !== false ? 'checked' : ''}> UVP-Feld anzeigen</label>
         </div>
@@ -759,6 +771,8 @@
     } else if (a === 'uvpReset') {
       t.meta.uvp = {};
       enqueueFetch(t); renderEditor();
+    } else if (a === 'googleUvp') {
+      openGoogleUvp(t);
     } else if (a === 'ackChange') {
       if (t.meta.priceCheck) t.meta.priceCheck.ack = true;
       save(); renderList(); renderEditor();
