@@ -54,3 +54,37 @@
 .pt-editing .pt-f:hover { outline-color: rgba(247, 122, 37, .7); }
 .pt-editing .pt-f.is-selected { outline: 0.35mm solid #f47a25; }
 .pt-expert-a5 .pt-bullets .nb { white-space: nowrap; }
+
+/* ---------- gemeinsame Teile weiterer Vorlagen ---------- */
+.pt .pt-xw, .pt .pt-xs { position: absolute; overflow: hidden; }
+.pt .pt-xw img, .pt .pt-xs img { display: block; height: auto; max-width: none; }
+.pt .pt-logo { display: flex; align-items: center; justify-content: flex-start; }
+.pt .pt-logo img { display: block; width: 100%; height: 100%; object-fit: contain; object-position: left center; }
+.pt .pt-ph { font-size: 2.5mm; color: #bbb; border: 0.25mm dashed #ccc; padding: 0.8mm 2mm; }
+.pt .pt-qr img { display: block; width: 100%; height: 100%; }
+.pt .pt-fit1 { white-space: nowrap; line-height: 1; }
+.pt .pt-fit1 span { display: inline-block; }
+
+/* ---------- Blister 52 × 40 mm ---------- */
+.pt-blister .pt-bl-head { position: absolute; left: 0; top: 0; width: 100%; height: 11.4mm; background: #ed6f00; }
+.pt-blister .pt-bl-brand { color: #fff; font-weight: 700; font-size: 6.5mm; text-align: center; text-transform: uppercase; display: flex; align-items: center; justify-content: center; }
+.pt-blister .pt-bl-name { font-weight: 400; font-size: 4.37mm; }
+.pt-blister .pt-bl-artnr { font-weight: 700; font-size: 2.8mm; line-height: 1; white-space: nowrap; }
+
+/* ---------- Preisschiene 100 × 39 mm ---------- */
+.pt-schiene .pt-sc-group { font-weight: 400; font-size: 4.75mm; }
+.pt-schiene .pt-sc-name { font-weight: 400; font-size: 4.12mm; }
+.pt-schiene .pt-sc-artnr { font-weight: 700; font-size: 2.77mm; line-height: 1; white-space: nowrap; }
+
+/* ---------- Quer Groß 105 × 78 mm ---------- */
+.pt-quer .pt-qu-bar { position: absolute; left: 0; width: 100%; background: #f47922; }
+.pt-quer .pt-qu-qr { background: #fff; padding: 0.6mm; }
+.pt-quer .pt-qu-artnr { font-weight: 400; font-size: 2.83mm; letter-spacing: 0.3mm; line-height: 1; white-space: nowrap; }
+.pt-quer .pt-qu-bullets { font-weight: 700; font-size: 3.5mm; letter-spacing: 0; line-height: 1.143; overflow: hidden; }
+.pt-quer .pt-qu-bullets ul { list-style: none; margin: 0; padding: 0 0 0 3.9mm; }
+.pt-quer .pt-qu-bullets li { position: relative; }
+.pt-quer .pt-qu-bullets li::before { content: '•'; position: absolute; left: -3.9mm; top: 0; font-size: 1.15em; line-height: 0.95; }
+.pt-quer .pt-qu-bullets .nb { white-space: nowrap; }
+.pt-quer .pt-qu-group, .pt-quer .pt-qu-name { font-weight: 700; font-size: 3.8mm; letter-spacing: 0.24mm; }
+.pt-quer .pt-uvp svg { display: block; }
+

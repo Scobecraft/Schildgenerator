@@ -354,6 +354,8 @@
       if (!t) return;
       Object.assign(t.data, {
         group: r.group || '',
+        brand: r.brand || r.manufacturer || '',
+        ean: r.ean || '',
         nameFull: r.name || '',
         nameShort: shortenName(r.name || ''),
         name: t.data.nameTwoLines ? (r.name || '') : shortenName(r.name || ''),
@@ -688,12 +690,16 @@
         </div>
         <label class="ed-field"><span>Warengruppe</span><input type="text" data-k="group" value="${esc(d.group)}"></label>
         <label class="ed-field"><span>Artikelname</span><input type="text" data-k="name" value="${esc(d.name)}"></label>
-        <div class="seg" role="group" aria-label="Artikelname">
+        ${T.twoLineName ? `<div class="seg" role="group" aria-label="Artikelname">
           <button type="button" class="${d.nameTwoLines ? '' : 'on'}" data-do="nameMode" data-mode="short">Kurz · 1 Zeile</button>
           <button type="button" class="${d.nameTwoLines ? 'on' : ''}" data-do="nameMode" data-mode="full">Vollständig · 2 Zeilen</button>
-        </div>
+        </div>` : ''}
         ${d.nameFull && d.nameFull !== d.name ? `<div class="uvp-note" style="margin:-2px 0 10px">Voller Name: ${esc(d.nameFull)}</div>` : ''}
-        <label class="ed-field"><span>Artikelnummer</span><input type="text" data-k="artnr" value="${esc(d.artnr)}"></label>
+        <div class="ed-grid">
+          <label class="ed-field"><span>Artikelnummer</span><input type="text" data-k="artnr" value="${esc(d.artnr)}"></label>
+          <label class="ed-field"><span>EAN (Barcode)</span><input type="text" inputmode="numeric" data-k="ean" value="${esc(d.ean || '')}"></label>
+        </div>
+        <label class="ed-field"><span>Marke (als Text, z. B. beim Blister)</span><input type="text" data-k="brand" value="${esc(d.brand || '')}"></label>
         <label class="ed-field"><span>Eigenschaften <span class="muted" style="font-weight:400">eine pro Zeile</span></span><textarea rows="5" data-k="bullets" style="font-family:inherit;font-size:13px">${esc((d.bullets || []).join('\n'))}</textarea></label>
       </section>
       <section class="ed-section">

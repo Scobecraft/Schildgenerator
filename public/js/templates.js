@@ -40,6 +40,7 @@
     id: 'expert-a5',
     name: 'expert A5 – Klassisch',
     short: 'A5',
+    twoLineName: true,
     format: 'A5 Hochformat',
     description: 'Das Standard-Schild: Logo, Warengruppe, Name, Eigenschaften, UVP-Box und großer Preis.',
     width: 148,
@@ -109,6 +110,223 @@
   };
 
   /* ------------------------------------------------------------------ */
+  /* Gemeinsame Bausteine für weitere Vorlagen                           */
+  /* ------------------------------------------------------------------ */
+  function makePos(fields, layout, extra = {}) {
+    return (id) => {
+      const b = fields[id];
+      const o = (layout || {})[id] || {};
+      const e = extra[id] || {};
+      const s = o.s || 1;
+      return `left:${b.x + (o.dx || 0) + (e.dx || 0)}mm;top:${b.y + (o.dy || 0) + (e.dy || 0)}mm;width:${b.w + (e.dw || 0)}mm;height:${b.h + (e.dh || 0)}mm;` +
+        (s !== 1 ? `transform:scale(${s});transform-origin:top left;` : '');
+    };
+  }
+
+  function fmtUvpComma(v) {
+    if (!(v > 0)) return '';
+    const cents = Math.round(v * 100) % 100;
+    return cents === 0 ? `${Math.round(v)},-` : v.toFixed(2).replace('.', ',');
+  }
+
+  // expert-Logo (Schriftzug + Stern) in beliebiger Größe; k = Faktor gegenüber dem A5-Schild
+  function expertLogoHtml(x, y, k, base) {
+    const src = (base || '') + '/expert_logo.svg';
+    const wx = x, wy = y + 5.45 * k, sx = x + 55.3 * k, sy = y;
+    return `<div class="pt-xw" style="left:${wx}mm;top:${wy}mm;width:${51.07 * k}mm;height:${9.39 * k}mm"><img src="${src}" alt="" style="width:${75.075 * k}mm;margin-top:${-6.42 * k}mm"></div>
+      <div class="pt-xs" style="left:${sx}mm;top:${sy}mm;width:${18.4 * k}mm;height:${18.4 * k}mm"><img src="${src}" alt="" style="width:${70.65 * k}mm;margin-left:${-51.68 * k}mm;margin-top:${-0.466 * k}mm"></div>`;
+  }
+
+  // nur der Schriftzug "expert", senkrecht (von unten nach oben zu lesen)
+  function expertVerticalHtml(x, y, len, base) {
+    const k = len / 51.07;
+    const thick = 9.39 * k;
+    return `<div class="pt-xw" style="left:${x}mm;top:${y + len}mm;width:${len}mm;height:${thick}mm;transform:rotate(-90deg);transform-origin:0 0"><img src="${base || ''}/expert_logo.svg" alt="" style="width:${75.075 * k}mm;margin-top:${-6.42 * k}mm"></div>`;
+  }
+
+  // EAN-13 / EAN-8 als SVG (Striche + Ziffern), Maße in mm
+  const EAN_L = ['0001101', '0011001', '0010011', '0111101', '0100011', '0110001', '0101111', '0111011', '0110111', '0001011'];
+  const EAN_G = ['0100111', '0110011', '0011011', '0100001', '0011101', '0111001', '0000101', '0010001', '0001001', '0010111'];
+  const EAN_R = ['1110010', '1100110', '1101100', '1000010', '1011100', '1001110', '1010000', '1000100', '1001000', '1110100'];
+  const EAN_P = ['LLLLLL', 'LLGLGG', 'LLGGLG', 'LLGGGL', 'LGLLGG', 'LGGLLG', 'LGGGLL', 'LGLGLG', 'LGLGGL', 'LGGLGL'];
+  function eanCheck(digits) {
+    let sum = 0;
+    for (let i = digits.length - 1, w = 3; i >= 0; i--, w = 4 - w) sum += Number(digits[i]) * w;
+    return (10 - (sum % 10)) % 10;
+  }
+  function eanBits(code) {
+    let c = String(code || '').replace(/\D/g, '');
+    if (c.length === 12) c += eanCheck(c);
+    if (c.length === 7) c += eanCheck(c);
+    if (c.length === 13 && Number(c[12]) === eanCheck(c.slice(0, 12))) {
+      const d = c.split('').map(Number);
+      let bits = '101';
+      for (let i = 1; i <= 6; i++) bits += (EAN_P[d[0]][i - 1] === 'L' ? EAN_L : EAN_G)[d[i]];
+      bits += '01010';
+      for (let i = 7; i <= 12; i++) bits += EAN_R[d[i]];
+      return { bits: bits + '101', text: c };
+    }
+    if (c.length === 8 && Number(c[7]) === eanCheck(c.slice(0, 7))) {
+      const d = c.split('').map(Number);
+      let bits = '101';
+      for (let i = 0; i < 4; i++) bits += EAN_L[d[i]];
+      bits += '01010';
+      for (let i = 4; i < 8; i++) bits += EAN_R[d[i]];
+      return { bits: bits + '101', text: c };
+    }
+    return null;
+  }
+  function eanSvg(code, w, h) {
+    const e = eanBits(code);
+    if (!e) return '';
+    const textH = h * 0.27;
+    const barH = h - textH - 0.2;
+    const m = w / e.bits.length;
+    let rects = '';
+    for (let i = 0; i < e.bits.length;) {
+      if (e.bits[i] === '1') {
+        let j = i;
+        while (j < e.bits.length && e.bits[j] === '1') j++;
+        rects += `<rect x="${(i * m).toFixed(3)}" y="0" width="${((j - i) * m).toFixed(3)}" height="${barH.toFixed(3)}"/>`;
+        i = j;
+      } else i++;
+    }
+    return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="100%" preserveAspectRatio="none" style="display:block;overflow:visible">
+      <g fill="#000">${rects}</g>
+      <text x="0" y="${h}" font-family="PT Text" font-weight="700" font-size="${(textH * 1.12).toFixed(2)}" textLength="${w}" lengthAdjust="spacingAndGlyphs">${e.text}</text></svg>`;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Blister (52 × 40 mm)                                                */
+  /* ------------------------------------------------------------------ */
+  Templates['blister'] = {
+    id: 'blister',
+    name: 'Blister',
+    short: 'Blister',
+    format: 'Blister',
+    width: 52,
+    height: 40,
+    description: 'Kleines Schild für Blisterware: Marke als Schriftzug, Artikelname, Preis, Artikelnummer.',
+    sample: { brand: 'PETER JÄCKEL', group: 'Schutzglas', name: '21736 Glas HD iPh 16 PM', artnr: '15088045452', price: 19.99, uvp: null },
+    fields: {
+      brand: { label: 'Marke', x: 0.2, y: 0.63, w: 50, h: 8.8 },
+      name: { label: 'Artikelname', x: 2.6, y: 12.25, w: 47.5, h: 4.7 },
+      price: { label: 'Preis', x: 0, y: 14.5, w: 52, h: 22.5 },
+      artnr: { label: 'Artikelnummer', x: 2.3, y: 37.3, w: 30, h: 2.7 },
+    },
+    render(tag) {
+      const d = tag.data || {};
+      const pos = makePos(this.fields, tag.layout);
+      return `
+<div class="pt pt-blister" data-template="blister" style="width:52mm;height:40mm">
+  <div class="pt-bl-head"></div>
+  <div class="pt-f pt-bl-brand pt-fit1" data-field="brand" style="${pos('brand')}"><span>${esc(d.brand || '')}</span></div>
+  <div class="pt-f pt-bl-name pt-fit1" data-field="name" style="${pos('name')}"><span>${esc(d.name)}</span></div>
+  <div class="pt-f pt-price" data-field="price" data-price="${d.price > 0 ? Number(d.price).toFixed(2) : ''}" data-pfont="14.4" data-pcx="24.7" data-pbase="19.2" style="${pos('price')}"></div>
+  <div class="pt-f pt-bl-artnr" data-field="artnr" style="${pos('artnr')}">${esc(d.artnr || '')}</div>
+</div>`;
+    },
+  };
+
+  /* ------------------------------------------------------------------ */
+  /* Preisschiene (100 × 39 mm)                                          */
+  /* ------------------------------------------------------------------ */
+  Templates['schiene'] = {
+    id: 'schiene',
+    name: 'Preisschiene',
+    short: 'Schiene',
+    format: 'Preisschiene',
+    width: 100,
+    height: 39,
+    description: 'Für die Preisschiene am Regal: Herstellerlogo, EAN-Barcode, „expert“ senkrecht, Warengruppe, Name, Preis.',
+    sample: { brand: 'PETER JÄCKEL', group: 'Schutzglas', name: '21736 Glas HD iPh 16 PM', artnr: '15088045452', ean: '4031574217361', price: 19.99, uvp: null },
+    fields: {
+      logo: { label: 'Herstellerlogo', x: 1.7, y: 2.4, w: 35, h: 6.9 },
+      ean: { label: 'Barcode', x: 70, y: 1.8, w: 24, h: 8.8 },
+      group: { label: 'Warengruppe', x: 12, y: 17.66, w: 50, h: 5.4 },
+      name: { label: 'Artikelname', x: 12, y: 26.32, w: 54, h: 4.5 },
+      artnr: { label: 'Artikelnummer', x: 42.7, y: 33.55, w: 22, h: 3 },
+      price: { label: 'Preis', x: 60, y: 11, w: 39.5, h: 27 },
+    },
+    render(tag, opts = {}) {
+      const d = tag.data || {};
+      const base = opts.qrBase || '';
+      const pos = makePos(this.fields, tag.layout);
+      const logoSrc = logoSrcFor(d, base);
+      return `
+<div class="pt pt-schiene" data-template="schiene" style="width:100mm;height:39mm">
+  ${expertVerticalHtml(4.26, 13.21, 23.24, base)}
+  <div class="pt-f pt-logo" data-field="logo" style="${pos('logo')}">${logoSrc ? `<img src="${logoSrc}" alt="">` : '<span class="pt-ph">Logo</span>'}</div>
+  <div class="pt-f pt-ean" data-field="ean" style="${pos('ean')}">${eanSvg(d.ean, this.fields.ean.w, this.fields.ean.h)}</div>
+  <div class="pt-f pt-sc-group pt-fit1" data-field="group" style="${pos('group')}"><span>${esc(d.group)}</span></div>
+  <div class="pt-f pt-sc-name pt-fit1" data-field="name" style="${pos('name')}"><span>${esc(d.name)}</span></div>
+  <div class="pt-f pt-sc-artnr" data-field="artnr" style="${pos('artnr')}">${esc(d.artnr || '')}</div>
+  <div class="pt-f pt-price" data-field="price" data-price="${d.price > 0 ? Number(d.price).toFixed(2) : ''}" data-pfont="17" data-pcx="20.9" data-pbase="19.8" style="${pos('price')}"></div>
+</div>`;
+    },
+  };
+
+  /* ------------------------------------------------------------------ */
+  /* Quer Groß (105 × 78 mm)                                             */
+  /* ------------------------------------------------------------------ */
+  Templates['quer'] = {
+    id: 'quer',
+    name: 'Quer Groß',
+    short: 'Quer',
+    format: 'Querformat',
+    width: 105,
+    height: 78,
+    description: 'Querformat mit Logo, Artikelnummer und Eigenschaften links, Warengruppe, Name, UVP und Preis rechts.',
+    sample: {
+      brand: 'PETER JÄCKEL', group: 'Schutzglas', name: '21736 Glas HD iPh 16 PM', artnr: '15088045452', price: 19.99, uvp: 24.99,
+      bullets: ['Kompatibilität: Apple iPhone 16 Pro Max', 'Glas', 'Transparent'],
+    },
+    fields: {
+      qr: { label: 'QR-Code', x: 86, y: 0.6, w: 15.8, h: 15.8 },
+      logo: { label: 'Herstellerlogo', x: 2.5, y: 17.3, w: 30, h: 8 },
+      artnr: { label: 'Artikelnummer', x: 4, y: 25.65, w: 44, h: 3.2 },
+      bullets: { label: 'Eigenschaften', x: 4.6, y: 29.8, w: 45, h: 38.5 },
+      group: { label: 'Warengruppe', x: 54.2, y: 18.45, w: 48, h: 4.2 },
+      name: { label: 'Artikelname', x: 54.2, y: 23.92, w: 48, h: 4.2 },
+      uvp: { label: 'UVP / Ersparnis', x: 54, y: 31.3, w: 39.9, h: 11.9 },
+      price: { label: 'Preis', x: 50, y: 44.3, w: 54, h: 24.5 },
+    },
+    render(tag, opts = {}) {
+      const d = tag.data || {};
+      const base = opts.qrBase || '';
+      const pos = makePos(this.fields, tag.layout);
+      const pct = savingsPercent(d.price, d.uvp);
+      const showUvp = d.showUvp !== false && pct !== null && pct >= 1;
+      const bullets = (d.bullets || []).filter((b) => String(b).trim());
+      const qrSrc = d.qrUrl ? base + '/api/qr?text=' + encodeURIComponent(d.qrUrl) : '';
+      const logoSrc = logoSrcFor(d, base);
+      const T = (x, y, t) => `<text x="${x}" y="${y}">${esc(t)}</text>`;
+      return `
+<div class="pt pt-quer" data-template="quer" style="width:105mm;height:78mm">
+  <div class="pt-qu-bar" style="top:0;height:4.5mm"></div>
+  <div class="pt-qu-bar" style="top:69.1mm;height:8.9mm"></div>
+  ${expertLogoHtml(3.1, 6.1, 0.463, base)}
+  <div class="pt-f pt-qr pt-qu-qr" data-field="qr" style="${pos('qr')}">${qrSrc ? `<img src="${qrSrc}" alt="">` : ''}</div>
+  <div class="pt-f pt-logo" data-field="logo" style="${pos('logo')}">${logoSrc ? `<img src="${logoSrc}" alt="">` : '<span class="pt-ph">Logo</span>'}</div>
+  <div class="pt-f pt-qu-artnr" data-field="artnr" style="${pos('artnr')}">${d.artnr ? 'Art.Nr.: ' + esc(d.artnr) : ''}</div>
+  <div class="pt-f pt-qu-bullets pt-fitn" data-field="bullets" style="${pos('bullets')}"><ul>${bullets.map((b) => `<li>${esc(b).replace(/(\S+-\S+)/g, '<span class="nb">$1</span>')}</li>`).join('')}</ul></div>
+  <div class="pt-f pt-qu-group pt-fit1" data-field="group" style="${pos('group')}"><span>${esc(d.group)}</span></div>
+  <div class="pt-f pt-qu-name pt-fit1" data-field="name" style="${pos('name')}"><span>${esc(d.name)}</span></div>
+  <div class="pt-f pt-uvp" data-field="uvp" style="${pos('uvp')}${showUvp ? '' : 'visibility:hidden;'}">
+    <svg viewBox="0 0 39.9 12.3" preserveAspectRatio="none" style="display:block;width:100%;height:100%;overflow:visible">
+      <rect x="0" y="0" width="20.1" height="12.3" fill="#005bab"/>
+      <rect x="20.1" y="0" width="19.8" height="12.3" fill="#ff7321"/>
+      <g class="pt-uvp-t" fill="#fff" text-anchor="middle" font-family="PT Price" font-style="italic" font-weight="900" font-size="5.4" style="font-stretch:74%;font-variation-settings:'wdth' 74,'wght' 900" data-maxw="18.6">
+        ${T(10.3, 4.9, 'UVP')}${T(10.3, 11.0, fmtUvpComma(d.uvp))}${T(30.2, 4.9, pct !== null ? pct + '%' : '')}${T(30.2, 11.0, 'SPAREN')}
+      </g>
+    </svg>
+  </div>
+  <div class="pt-f pt-price" data-field="price" data-price="${d.price > 0 ? Number(d.price).toFixed(2) : ''}" data-pfont="23" data-pcx="27.3" data-pbase="20.7" style="${pos('price')}"></div>
+</div>`;
+    },
+  };
+
+  /* ------------------------------------------------------------------ */
   /* Preis mit weißer Umrandung + Schatten (wie Original)                */
   /* ------------------------------------------------------------------ */
   const SVGNS = 'http://www.w3.org/2000/svg';
@@ -135,6 +353,20 @@
     return p.map((q) => q.map((v) => v.toFixed(3)).join(',')).join(' ');
   }
 
+  // Sichtbare (Tinten-)Grenzen einer Ziffer der Preisschrift, relativ zum Zeichenursprung
+  const inkCache = {};
+  let inkCtx = null;
+  function glyphInk(ch, size) {
+    if (!inkCache[ch]) {
+      inkCtx = inkCtx || document.createElement('canvas').getContext('2d');
+      inkCtx.font = 'italic 900 200px "PT Price"';
+      try { inkCtx.fontStretch = 'extra-condensed'; } catch (_) { /* älterer Browser */ }
+      const m = inkCtx.measureText(ch);
+      inkCache[ch] = { l: -m.actualBoundingBoxLeft / 200, r: m.actualBoundingBoxRight / 200 };
+    }
+    return { l: inkCache[ch].l * size, r: inkCache[ch].r * size };
+  }
+
   function buildPrice(box) {
     const raw = box.getAttribute('data-price');
     box.innerHTML = '';
@@ -144,11 +376,20 @@
     const cents = Math.round((value - euros) * 100);
     const bw = parseFloat(box.style.width);
     const bh = parseFloat(box.style.height);
+    // Größe/Lage je Vorlage über data-Attribute; alles andere skaliert mit der Schriftgröße
+    const font = parseFloat(box.dataset.pfont) || PRICE.font;
+    const k = font / PRICE.font;
+    const P = {
+      font, blue: PRICE.blue,
+      stroke: PRICE.stroke * k, track: PRICE.track * k, dotGap: PRICE.dotGap * k,
+      centerX: box.dataset.pcx != null ? parseFloat(box.dataset.pcx) : PRICE.centerX,
+      baseline: box.dataset.pbase != null ? parseFloat(box.dataset.pbase) : PRICE.baseline,
+    };
 
     const svg = el('svg', { viewBox: `0 0 ${bw} ${bh}`, width: '100%', height: '100%', overflow: 'visible' });
     const defs = el('defs');
     const filt = el('filter', { id: 'ptShadow' + Math.random().toString(36).slice(2), x: '-20%', y: '-20%', width: '140%', height: '150%' });
-    filt.appendChild(el('feDropShadow', { dx: '0.55', dy: '0.75', stdDeviation: '0.75', 'flood-color': '#000', 'flood-opacity': '0.38' }));
+    filt.appendChild(el('feDropShadow', { dx: (0.55 * k).toFixed(3), dy: (0.75 * k).toFixed(3), stdDeviation: (0.75 * k).toFixed(3), 'flood-color': '#000', 'flood-opacity': '0.38' }));
     defs.appendChild(filt);
     svg.appendChild(defs);
     const g = el('g', { filter: `url(#${filt.getAttribute('id')})` });
@@ -157,51 +398,45 @@
 
     const textAttrs = (size) => ({
       'font-family': 'PT Price', 'font-style': 'italic', 'font-weight': '900', 'font-size': size,
-      style: 'font-stretch:62%;font-variation-settings:"wdth" 62,"wght" 900',
+      style: 'font-stretch:62%;font-variation-settings:"wdth" 62,"wght" 900;font-feature-settings:"pnum" 1;font-variant-numeric:proportional-nums',
     });
 
-    // Glyphen einzeln setzen: erst weiße Kontur, dann Blau -> jede Ziffer überdeckt die vorherige leicht
+    // Ziffern nach ihrer sichtbaren Breite setzen (die Schrift hat nur gleich breite Ziffern,
+    // die Original-Schilder nutzen proportionale) – Abstände in Ziffernhöhen, am Original gemessen.
     const items = [];
-    let x = 0;
-    const digits = String(euros);
-    for (const ch of digits) {
-      const t = el('text', { ...textAttrs(PRICE.font), x: 0, y: 0 });
-      t.textContent = ch;
-      g.appendChild(t);
-      const adv = t.getComputedTextLength();
-      g.removeChild(t);
-      items.push({ type: 'glyph', ch, x, size: PRICE.font });
-      x += adv + PRICE.track;
-    }
-    const capH = PRICE.font * 0.72;
+    const cap = P.font * 0.694;           // tatsächliche Ziffernhöhe
     const skew = 12;
+    const t12 = Math.tan((skew * Math.PI) / 180);
+    const GAP_DIGIT = 0.073 * cap;        // Abstand zwischen großen Ziffern (sichtbare Kanten)
+    let cursor = 0;
+    let lastR = 0;
+    for (const ch of String(euros)) {
+      const m = glyphInk(ch, P.font);
+      const gx = cursor - m.l;
+      items.push({ type: 'glyph', ch, x: gx, size: P.font });
+      lastR = gx + m.r;
+      cursor = lastR + GAP_DIGIT;
+    }
+    const capH = P.font * 0.72;
     if (cents === 0) {
       // ".-" als Balken (oben) und Quadrat (unten) wie im Original
-      const t12 = Math.tan((skew * Math.PI) / 180);
-      const dotX = x + PRICE.dotGap;
-      // Quadrat unten (Punkt)
+      const dotX = lastR + 0.09 * cap;
       items.push({ type: 'poly', pts: skewPoly(dotX, -capH * 0.25, capH * 0.25, capH * 0.25, skew) });
-      // Balken darüber (Strich), bündig zur kursiven Kante des Quadrats
       const barBottom = -capH * 0.30;
       const barH = capH * 0.24;
       items.push({ type: 'poly', pts: skewPoly(dotX - barBottom * t12 + capH * 0.03, barBottom - barH, capH * 0.37, barH, skew) });
-      x = dotX + capH * 0.45;
     } else {
-      // Punkt + kleinere, hochgestellte Cents
-      const dotX = x - PRICE.font * 0.02;
-      items.push({ type: 'poly', pts: skewPoly(dotX, -capH * 0.2, PRICE.font * 0.15, capH * 0.2, skew) });
-      let cx = dotX + PRICE.font * 0.17;
-      const cs = PRICE.font * 0.5;
+      // Punkt unten, kleinere Cents darüber hochgestellt (wie auf den expert-Schildern)
+      const dotX = lastR + 0.06 * cap;
+      items.push({ type: 'poly', pts: skewPoly(dotX, -cap * 0.26, cap * 0.2, cap * 0.26, skew) });
+      const cs = P.font * 0.57;
+      let cc = lastR + 0.0 * cap;
       for (const ch of String(cents).padStart(2, '0')) {
-        const t = el('text', { ...textAttrs(cs), x: 0, y: 0 });
-        t.textContent = ch;
-        g.appendChild(t);
-        const adv = t.getComputedTextLength();
-        g.removeChild(t);
-        items.push({ type: 'glyph', ch, x: cx, size: cs, y: -capH + cs * 0.72 });
-        cx += adv + PRICE.track * 0.5;
+        const m = glyphInk(ch, cs);
+        const gx = cc - m.l;
+        items.push({ type: 'glyph', ch, x: gx, size: cs, y: -cap + cs * 0.694 });
+        cc = gx + m.r + 0.09 * cap;
       }
-      x = cx;
     }
 
     const inner = el('g');
@@ -209,22 +444,22 @@
     for (const it of items) {
       if (it.type === 'glyph') {
         const common = { ...textAttrs(it.size), x: it.x, y: it.y || 0 };
-        inner.appendChild(Object.assign(el('text', { ...common, fill: '#fff', stroke: '#fff', 'stroke-width': PRICE.stroke * (it.size / PRICE.font), 'stroke-linejoin': 'round' }), { textContent: it.ch }));
-        inner.appendChild(Object.assign(el('text', { ...common, fill: PRICE.blue }), { textContent: it.ch }));
+        inner.appendChild(Object.assign(el('text', { ...common, fill: '#fff', stroke: '#fff', 'stroke-width': P.stroke * (it.size / P.font), 'stroke-linejoin': 'round' }), { textContent: it.ch }));
+        inner.appendChild(Object.assign(el('text', { ...common, fill: P.blue }), { textContent: it.ch }));
       } else {
-        inner.appendChild(el('polygon', { points: it.pts, fill: '#fff', stroke: '#fff', 'stroke-width': PRICE.stroke, 'stroke-linejoin': 'round' }));
-        inner.appendChild(el('polygon', { points: it.pts, fill: PRICE.blue }));
+        inner.appendChild(el('polygon', { points: it.pts, fill: '#fff', stroke: '#fff', 'stroke-width': P.stroke, 'stroke-linejoin': 'round' }));
+        inner.appendChild(el('polygon', { points: it.pts, fill: P.blue }));
       }
     }
     // Position: Mitte wie im Original, bei Bedarf verkleinern, damit es ins Feld passt
     const bb = inner.getBBox();
-    const pad = PRICE.stroke / 2 + 0.8;
+    const pad = P.stroke / 2 + 0.8;
     const width = bb.width + pad * 2;
     const height = capH + pad * 2; // Ziffernhöhe zählt, nicht die Schrift-Metrik
     const scale = Math.min(1, (bw) / width, (bh) / height);
-    let left = PRICE.centerX - (bb.width * scale) / 2;
+    let left = P.centerX - (bb.width * scale) / 2;
     left = Math.max(pad * scale, Math.min(left, bw - bb.width * scale - pad * scale));
-    const baseY = PRICE.baseline + (1 - scale) * capH * 0.5;
+    const baseY = P.baseline + (1 - scale) * capH * 0.5;
     inner.setAttribute('transform', `translate(${(left - bb.x * scale).toFixed(3)} ${baseY.toFixed(3)}) scale(${scale.toFixed(4)})`);
   }
 
@@ -256,10 +491,11 @@
 
   function fitUvp(box) {
     box.querySelectorAll('.pt-uvp-t text').forEach((t) => {
+      const maxW = parseFloat(t.parentNode.getAttribute('data-maxw')) || UVPT.maxW;
       t.removeAttribute('textLength');
       t.removeAttribute('lengthAdjust');
-      if (t.getComputedTextLength() > UVPT.maxW) {
-        t.setAttribute('textLength', UVPT.maxW);
+      if (t.getComputedTextLength() > maxW) {
+        t.setAttribute('textLength', maxW);
         t.setAttribute('lengthAdjust', 'spacingAndGlyphs');
       }
     });
@@ -273,7 +509,13 @@
   }
 
   async function fitAll(root = document) {
-    try { await document.fonts.ready; } catch (_) { /* egal */ }
+    try {
+      await Promise.all([
+        document.fonts.load('italic 900 100px "PT Price"', '0123456789'),
+        document.fonts.load('400 10px "PT Text"'), document.fonts.load('700 10px "PT Text"'),
+      ]);
+      await document.fonts.ready;
+    } catch (_) { /* egal */ }
     await Promise.all([...root.querySelectorAll('.pt img')].map((img) => img.complete ? null : new Promise((r) => { img.onload = img.onerror = r; })));
     root.querySelectorAll('.pt').forEach(fitTag);
   }

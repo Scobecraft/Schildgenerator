@@ -1,0 +1,16 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="/css/tag.css">
+<style>body{margin:0;background:#fff}#wrap{position:relative;display:inline-block}
+#o{position:absolute;left:0;top:0;width:100%;height:100%;opacity:.5;z-index:5;mix-blend-mode:multiply}</style></head><body>
+<div id="wrap"><div id="t"></div><img id="o"></div>
+<script src="/js/templates.js"></script>
+<script>
+const q = new URLSearchParams(location.search);
+const id = q.get('t');
+const T = PT.Templates[id];
+const tag = { template: id, data: { ...T.sample, qrUrl: 'https://www.expert.de/', logoUrl: '' }, layout: {} };
+document.getElementById('t').innerHTML = T.render(tag);
+const o = document.getElementById('o');
+o.src = '/_o_' + id + '.png';
+o.style.opacity = q.get('op') || '0.5';
+PT.fitAll().then(() => { document.body.dataset.ready = 1; });
+</script></body></html>

@@ -83,7 +83,16 @@ Pro Schild umschaltbar zwischen **Original** (Standard) und **Hochskaliert**. Ho
 
 ## Vorlagen
 
-Vorlagen liegen in `public/js/templates.js` (Aufbau) und `public/css/tag.css` (Aussehen). Aktuell: **expert A5 – Klassisch**.
+Vorlagen liegen in `public/js/templates.js` (Aufbau) und `public/css/tag.css` (Aussehen). Aktuell:
+
+| Vorlage | Größe | Besonderheiten |
+|---|---|---|
+| **expert A5 – Klassisch** | 148 × 210 mm | Logo, Warengruppe, Name (auch 2-zeilig), Eigenschaften, UVP-Box, großer Preis, QR-Code |
+| **Blister** | 52 × 40 mm | Marke als Schriftzug im orangen Kopf, Name, Preis, Artikelnummer |
+| **Preisschiene** | 100 × 39 mm | Herstellerlogo, EAN-Barcode, „expert“ senkrecht, Warengruppe, Name, Preis |
+| **Quer Groß** | 105 × 78 mm | Logo, Art.Nr. und Eigenschaften links; Warengruppe, Name, UVP-Box (nebeneinander) und Preis rechts |
+
+`dev/calib-vorlagen.html` legt eine Vorlage zum Abgleich halbtransparent über das Original aus `dev/vorlagen/`.
 
 - **Auswahl mit Vorschau:** „Vorlage für neue Schilder“ öffnet alle Vorlagen als Vorschaubild (live gezeichnet, also immer aktuell).
 - **Vorlage wechseln:** im Editor beim ausgewählten Schild. Die Daten bleiben, verschobene Felder werden zurückgesetzt.
