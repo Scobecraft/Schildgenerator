@@ -205,24 +205,29 @@
     short: 'Blister',
     format: 'Blister',
     width: 52,
-    height: 40,
-    description: 'Kleines Schild für Blisterware: Marke als Schriftzug, Artikelname, Preis, Artikelnummer.',
-    sample: { brand: 'PETER JÄCKEL', group: 'Schutzglas', name: '21736 Glas HD iPh 16 PM', artnr: '15088045452', price: 19.99, uvp: null },
+    height: 39.5,
+    description: 'Kleines Schild für Blisterware: Marke im orangen Kopf, Name (bis 2 Zeilen), Preis passt sich dem Platz an, Artikelnummer.',
+    sample: { brand: 'POPSOCKETS', group: 'Zubehör', name: 'Magsafe MSC-Clear 840173727768', artnr: '15099022195', price: 29.99, uvp: null },
+    // Maße aus dem Original-PDF (Schild 52 × 39,5 mm)
     fields: {
-      brand: { label: 'Marke', x: 0.2, y: 0.63, w: 50, h: 8.8 },
-      name: { label: 'Artikelname', x: 2.6, y: 12.25, w: 47.5, h: 4.7 },
-      price: { label: 'Preis', x: 0, y: 14.5, w: 52, h: 22.5 },
-      artnr: { label: 'Artikelnummer', x: 2.3, y: 37.3, w: 30, h: 2.7 },
+      brand: { label: 'Marke', x: 1, y: 1.18, w: 48, h: 7.06 },
+      name: { label: 'Artikelname', x: 1, y: 11.31, w: 48, h: 10 },
+      price: { label: 'Preis', x: 0, y: 11, w: 52, h: 26 },
+      artnr: { label: 'Artikelnummer', x: 2, y: 35.98, w: 30, h: 2.82 },
     },
     render(tag) {
       const d = tag.data || {};
       const pos = makePos(this.fields, tag.layout);
+      // Zeilenumbruch: automatisch, oder selbst gesetzt mit "|" bzw. Zeilenumbruch im Namen
+      const name = esc(d.name || '').replace(/\s*\|\s*/g, '\n');
       return `
-<div class="pt pt-blister" data-template="blister" style="width:52mm;height:40mm">
+<div class="pt pt-blister" data-template="blister" style="width:52mm;height:39.5mm">
   <div class="pt-bl-head"></div>
   <div class="pt-f pt-bl-brand pt-fit1" data-field="brand" style="${pos('brand')}"><span>${esc(d.brand || '')}</span></div>
-  <div class="pt-f pt-bl-name pt-fit1" data-field="name" style="${pos('name')}"><span>${esc(d.name)}</span></div>
-  <div class="pt-f pt-price" data-field="price" data-price="${d.price > 0 ? Number(d.price).toFixed(2) : ''}" data-pfont="15.1" data-pcx="25.2" data-pbase="19.2" style="${pos('price')}"></div>
+  <div class="pt-f pt-bl-name pt-fitn" data-field="name" style="${pos('name')}">${name}</div>
+  <div class="pt-f pt-price" data-field="price" data-price="${d.price > 0 ? Number(d.price).toFixed(2) : ''}"
+    data-pfill="1" data-ptop-from="name" data-pgap="2.87" data-pfont="15.3" data-pcx="25.19" data-pbase="22.85" data-pmaxw="48"
+    data-pcs="0.70" data-pcy="-0.052" data-pcx0="0.04" data-pcsp="0.986" data-pdx="-0.007" data-pdy="-0.052" style="${pos('price')}"></div>
   <div class="pt-f pt-bl-artnr" data-field="artnr" style="${pos('artnr')}">${esc(d.artnr || '')}</div>
 </div>`;
     },
@@ -490,6 +495,9 @@
       centerX: box.dataset.pcx != null ? parseFloat(box.dataset.pcx) : PRICE.centerX,
       baseline: box.dataset.pbase != null ? parseFloat(box.dataset.pbase) : PRICE.baseline,
     };
+    // Cent-Darstellung je Vorlage (Größe, Höhe, Abstände) – Standard wie am A5-Original gemessen
+    const num = (k, def) => (box.dataset[k] != null && box.dataset[k] !== '' ? parseFloat(box.dataset[k]) : def);
+    const C = { scale: num('pcs', 0.66), dy: num('pcy', 0), x: num('pcx0', CENT_X), space: num('pcsp', CENT_SPACE), dot: num('pdx', DOT_X), dotY: num('pdy', 0) };
 
     const svg = el('svg', { viewBox: `0 0 ${bw} ${bh}`, width: '100%', height: '100%', overflow: 'visible' });
     const defs = el('defs');
@@ -520,13 +528,13 @@
       items.push({ d: GL.dash.d, x: cursor + GL.dash.dx * S, y: 0, s: S });
     } else {
       // Punkt unten, Cents (0,66 × Ziffernhöhe) oben bündig darüber
-      items.push({ d: GL.dot.d, x: cursor + DOT_X * cap, y: 0, s: S });
-      const cs = S * 0.66;
-      let cx = cursor + CENT_X * cap;
+      items.push({ d: GL.dot.d, x: cursor + C.dot * cap, y: C.dotY * cap, s: S });
+      const cs = S * C.scale;
+      let cx = cursor + C.x * cap;
       for (const ch of String(cents).padStart(2, '0')) {
         const gl = GL.g[ch];
-        items.push({ d: gl.d, x: cx, y: -cap + GL.cap * cs, s: cs });
-        cx += gl.adv * cs * CENT_SPACE;
+        items.push({ d: gl.d, x: cx, y: -cap + GL.cap * cs + C.dy * cap, s: cs });
+        cx += gl.adv * cs * C.space;
       }
     }
 
@@ -537,6 +545,17 @@
       const tr = `translate(${it.x.toFixed(3)} ${it.y.toFixed(3)}) scale(${it.s.toFixed(5)})`;
       inner.appendChild(el('path', { d: it.d, transform: tr, fill: '#fff', 'fill-rule': 'evenodd', stroke: '#fff', 'stroke-width': strokeU.toFixed(1), 'stroke-linejoin': 'round' }));
       inner.appendChild(el('path', { d: it.d, transform: tr, fill: P.blue, 'fill-rule': 'evenodd' }));
+    }
+    // Modus "füllen" (z. B. Blister): Preis so groß wie der freie Platz erlaubt – wie im Original.
+    // ptop = Oberkante der großen Ziffern, pbase = Grundlinie, pmaxw = maximale Breite (alles mm im Feld)
+    if (box.dataset.pfill === '1') {
+      const bb0 = inner.getBBox();
+      const top = num('ptop', 0), maxW = num('pmaxw', bw);
+      const s = Math.max(0.2, Math.min((P.baseline - top) / capH, maxW / bb0.width));
+      let left = P.centerX - (bb0.width * s) / 2;
+      left = Math.max((bw - maxW) / 2, Math.min(left, bw - (bw - maxW) / 2 - bb0.width * s));
+      inner.setAttribute('transform', `translate(${(left - bb0.x * s).toFixed(3)} ${P.baseline.toFixed(3)}) scale(${s.toFixed(4)})`);
+      return;
     }
     // Position: Mitte wie im Original, bei Bedarf verkleinern, damit es ins Feld passt
     const bb = inner.getBBox();
@@ -667,11 +686,40 @@
     });
   }
 
+  // Preis im Modus "füllen": Oberkante = letzte Grundlinie des Namens + Abstand (wie im Original)
+  function priceTopFromName(root) {
+    root.querySelectorAll('.pt-price[data-ptop-from]').forEach((box) => {
+      const pt = box.closest('.pt');
+      const src = pt && pt.querySelector(`[data-field="${box.dataset.ptopFrom}"]`);
+      if (!pt || !src) return;
+      const W = parseFloat(pt.style.width);
+      const pr = pt.getBoundingClientRect();
+      const mmPerPx = W / pr.width;
+      const cs = getComputedStyle(src);
+      const zoom = pr.width / pt.offsetWidth || 1;
+      const fs = (parseFloat(cs.fontSize) || 0) * zoom * mmPerPx; // mm
+      const lh = (parseFloat(cs.lineHeight) || fs / zoom / mmPerPx) * zoom * mmPerPx; // mm
+      let lastBase = null;
+      if (src.textContent.trim()) {
+        // Zeilen zählen, Grundlinie: Oberkante + halber Zeilenabstand + 0,34 × Schriftgröße (gemessen für die Schrift)
+        const range = document.createRange();
+        range.selectNodeContents(src);
+        const tops = [...new Set([...range.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.top)))];
+        const n = tops.length;
+        if (n) lastBase = (src.getBoundingClientRect().top - pr.top) * mmPerPx + (lh - fs) / 2 + 0.84 * fs + (n - 1) * lh;
+      }
+      if (lastBase == null) lastBase = parseFloat(src.style.top); // kein Name: Preis darf bis unter den Kopf
+      const boxTop = parseFloat(box.style.top);
+      box.dataset.ptop = (lastBase + parseFloat(box.dataset.pgap || 0) - boxTop).toFixed(3);
+    });
+  }
+
   function fitTag(root) {
     root.querySelectorAll('.pt-uvp').forEach(fitUvp);
     root.querySelectorAll('.pt-fit1').forEach(fitOneLine);
     root.querySelectorAll('.pt-fitn').forEach(fitMulti);
     root.querySelectorAll('.pt-fitb').forEach(fitBullets);
+    priceTopFromName(root);
     root.querySelectorAll('.pt-price').forEach(buildPrice);
   }
 

@@ -67,10 +67,12 @@
 .pt .pt-fit1 span { display: inline-block; }
 
 /* ---------- Blister 52 × 40 mm ---------- */
-.pt-blister .pt-bl-head { position: absolute; left: 0; top: 0; width: 100%; height: 11.4mm; background: #ed6f00; }
-.pt-blister .pt-bl-brand { color: #fff; font-weight: 700; font-size: 6.5mm; text-align: center; text-transform: uppercase; display: flex; align-items: center; justify-content: center; }
-.pt-blister .pt-bl-name { font-weight: 400; font-size: 4.37mm; }
-.pt-blister .pt-bl-artnr { font-weight: 700; font-size: 2.8mm; line-height: 1; white-space: nowrap; }
+.pt-blister::after { content: ""; position: absolute; inset: 0; border: 0.15mm solid #000; pointer-events: none; z-index: 5; }
+.pt-blister .pt-bl-head { position: absolute; left: 0; top: 0; width: 100%; height: 11mm; background: #ed6f00; }
+.pt-blister .pt-bl-brand { color: #fff; font-weight: 500; font-size: 7.06mm; line-height: 1; text-align: center; white-space: nowrap; }
+.pt-blister .pt-bl-brand span { display: inline-block; }
+.pt-blister .pt-bl-name { font-weight: 500; font-size: 4.59mm; line-height: 1.0893; text-align: center; white-space: pre-line; overflow: hidden; }
+.pt-blister .pt-bl-artnr { font-weight: 500; font-size: 2.82mm; line-height: 1; white-space: nowrap; }
 
 /* ---------- Preisschiene 100 × 39 mm ---------- */
 .pt-schiene .pt-sc-group { font-weight: 400; font-size: 4.75mm; }
