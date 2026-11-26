@@ -923,7 +923,7 @@
   .sheet.L{page:landscape}
 </style></head><body>
 ${pages.map((p) => sheetHtml(p, opt)).join('\n')}
-<script src="/js/price-glyphs.js"></script><script src="/js/templates.js"></script>
+<script src="/js/price-glyphs.js"></script><script src="/js/tpl-specs.js"></script><script src="/js/templates.js"></script>
 </body></html>`;
   }
 
@@ -1179,8 +1179,15 @@ ${pages.map((p) => sheetHtml(p, opt)).join('\n')}
       : mode === 'add'
         ? 'Der Artikel wird zusätzlich als eigenes Schild in der gewählten Vorlage angelegt – z. B. für eine andere Größe.'
         : 'Diese Vorlage bekommen alle Artikel, die du ab jetzt abrufst. Bei einzelnen Schildern kannst du sie später noch wechseln.';
-    const list = Object.values(PT.Templates);
-    $('#tplGrid').innerHTML = list.map((T) => `
+    // nach Format gruppiert (A4 hoch … A7 quer, Weitere), innerhalb der Gruppe in Definitionsreihenfolge
+    const all = Object.values(PT.Templates);
+    const groups = (PT.GROUP_ORDER || []).concat([...new Set(all.map((T) => T.group || 'Weitere'))]).filter((g, i, a) => a.indexOf(g) === i);
+    const list = [];
+    for (const g of groups) {
+      const items = all.filter((T) => (T.group || 'Weitere') === g);
+      if (items.length) list.push({ heading: g }, ...items);
+    }
+    $('#tplGrid').innerHTML = list.map((T) => T.heading ? `<li class="tpl-group">${esc(T.heading)}</li>` : `
       <li><button type="button" class="tpl-card ${T.id === current ? 'current' : ''}" data-tpl="${esc(T.id)}">
         <div class="tpl-card-thumb"></div>
         <div class="tpl-card-name">${esc(T.name)} ${T.id === current ? '<span class="pill pill-orange">aktuell</span>' : ''}</div>

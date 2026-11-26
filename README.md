@@ -92,6 +92,25 @@ Vorlagen liegen in `public/js/templates.js` (Aufbau) und `public/css/tag.css` (A
 | **Preisschiene** | 100 × 39 mm | Herstellerlogo, EAN-Barcode, „expert“ senkrecht, Warengruppe, Name, Preis |
 | **Quer Groß** | 105 × 78 mm | Logo, Art.Nr. und Eigenschaften links; Warengruppe, Name, UVP-Box (nebeneinander) und Preis rechts |
 
+### Vorlagen aus dem bisherigen Schild-System
+
+20 weitere Vorlagen stammen aus dem PDF des bisherigen Systems. Name = **Format · Kopf**, Kürzel = Format + Kopf-Buchstabe:
+
+| Format | Größe (mm) | Köpfe |
+|---|---|---|
+| A4 hoch (`A4h`) | 199 × 286,8 | expert, Werbung |
+| A4 quer (`A4q`) | 287 × 199 | expert, Werbung |
+| A5 hoch (`A5h`) | 148,5 × 210,7 | expert, Werbung |
+| A5 quer (`A5q`) | 210 × 148 | expert, Werbung, Preishammer, B-Ware |
+| Mittel hoch (`Mh`) | 115 × 152 | expert, Werbung, Preishammer, Preishammer Bild |
+| A6 hoch (`A6h`) | 105 × 148 | expert, Werbung |
+| A7 quer (`A7q`) | 105 × 77 | expert, Werbung, Preishammer, Preishammer Bild |
+
+Kopf-Kürzel: **E** = expert, **W** = „Aus unserer Werbung“, **PH** = Preishammer, **PB** = Preishammer mit Bild, **B** = B-Ware – z. B. „A5q-W“. IDs: `a5q-werbung`, `m-preishammer-bild` …
+In der Vorlagen-Auswahl sind alle Vorlagen nach Format gruppiert.
+
+Erzeugt werden sie mit `dev/pdf-vorlagen/gen.py` (siehe README dort): Positionen, Grundlinien, Schriftgrößen und Farben werden aus dem PDF gelesen (`public/js/tpl-specs.js`), der feste Teil (Kopf, Balken, Farbverläufe, Grafiken) wird als Hintergrund gespeichert (`public/tpl/`). Die Originalschriften des PDFs werden **nicht** übernommen (lizenzpflichtig) – Text im Hintergrund ist in Pfade umgewandelt, veränderliche Texte nutzen freie Ersatzschriften (Roboto / Roboto Condensed).
+
 `dev/calib-vorlagen.html` legt eine Vorlage zum Abgleich halbtransparent über das Original aus `dev/vorlagen/`.
 
 - **Auswahl mit Vorschau:** „Vorlage für neue Schilder“ öffnet alle Vorlagen als Vorschaubild (live gezeichnet, also immer aktuell).

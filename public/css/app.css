@@ -360,3 +360,5 @@ body, .topbar, .panel, .card, .tag-item, .btn, textarea, input, select, .stage-t
   .toast { max-width: none; }
   input, select, textarea { font-size: 16px; } /* verhindert Zoom auf dem iPhone */
 }
+.tpl-grid .tpl-group { grid-column: 1 / -1; font-weight: 700; font-size: 13px; letter-spacing: .04em; text-transform: uppercase; color: var(--orange); padding: 10px 2px 0; border-bottom: 1px solid var(--line); }
+.tpl-grid .tpl-group:first-child { padding-top: 0; }

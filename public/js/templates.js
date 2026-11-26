@@ -327,6 +327,129 @@
   };
 
   /* ------------------------------------------------------------------ */
+  /* Vorlagen aus dem bisherigen Schild-System (PDF)                     */
+  /* Maße/Schriftgrößen stammen aus dem PDF (public/js/tpl-specs.js,    */
+  /* erzeugt mit dev/pdf-vorlagen/gen.py), Hintergrund = /tpl/<id>.svg   */
+  /* ------------------------------------------------------------------ */
+  const TXT_TOP = 0.8415; // Abstand Oberkante -> Grundlinie bei line-height 1 (Roboto), in Schriftgrößen
+  const r2 = (v) => Math.round(v * 100) / 100;
+
+  function pdfTemplate(S) {
+    const F = S.fields;
+    const W = S.width, H = S.height;
+    // rechter Rand für Textzeilen: vor dem QR-Code, sonst 3 mm vor der Kante
+    const rightAt = (x, y, h) => {
+      let r = W - 3;
+      for (const o of [F.qr, F.uvp, F.price]) {
+        if (o && o.x > x + 10 && y < o.y + o.h && y + h > o.y) r = Math.min(r, o.x - 1.5);
+      }
+      return r;
+    };
+    const fields = {};
+    const lineBox = (t, label, extraH = 0) => {
+      const y = r2(t.base - TXT_TOP * t.size);
+      return { label, x: t.x, y, w: r2(rightAt(t.x, y, t.size) - t.x), h: r2(t.size + extraH) };
+    };
+    if (F.qr) fields.qr = { label: 'QR-Code', ...F.qr };
+    if (F.logo) fields.logo = { label: 'Herstellerlogo', ...F.logo };
+    if (F.group) fields.group = lineBox(F.group, 'Warengruppe');
+    const namePitch = F.name ? (F.group && F.name.base - F.group.base > F.name.size ? F.name.base - F.group.base : F.name.size * 1.15) : 0;
+    if (F.name) fields.name = lineBox(F.name, 'Artikelname');
+    if (F.artnr) {
+      const y = r2(F.artnr.base - TXT_TOP * F.artnr.size);
+      fields.artnr = { label: 'Artikelnummer', x: F.artnr.x, y, w: Math.min(70, r2(W - 3 - F.artnr.x)), h: r2(F.artnr.size) };
+    }
+    if (F.bullets) {
+      const b = F.bullets;
+      const y = r2(b.top - b.pitch / 2 - 0.3415 * b.size);
+      fields.bullets = { label: 'Eigenschaften', x: b.x, y, w: b.w, h: r2(b.bottom - y) };
+    }
+    if (F.uvp) fields.uvp = { label: 'UVP / Ersparnis', x: F.uvp.x, y: F.uvp.y, w: F.uvp.w, h: F.uvp.h };
+    if (F.price) fields.price = { label: 'Preis', x: F.price.x, y: F.price.y, w: F.price.w, h: F.price.h };
+
+    // Was rutscht bei zweizeiligem Namen nach unten? Alles in derselben Spalte unter dem Namen.
+    const below = (id) => F.name && F[id] && Math.abs(F[id].x - F.name.x) < 8 && fields[id].y > fields.name.y;
+
+    const textStyle = (t) => `font-size:${t.size}mm;color:${t.color};`;
+    return {
+      id: S.id,
+      name: S.name,
+      short: S.short,
+      group: S.group,
+      variant: S.variant,
+      format: S.format,
+      width: W,
+      height: H,
+      description: S.description,
+      twoLineName: !!F.name,
+      fields,
+      render(tag, opts = {}) {
+        const d = tag.data || {};
+        const base = opts.qrBase || '';
+        const two = d.nameTwoLines === true && !!F.name;
+        const extra = {};
+        if (two) {
+          extra.name = { dh: namePitch };
+          for (const id of ['artnr', 'bullets']) if (below(id)) extra[id] = { dy: namePitch, dh: id === 'bullets' ? -namePitch : 0 };
+        }
+        const pos = makePos(fields, tag.layout, extra);
+        const pct = savingsPercent(d.price, d.uvp);
+        const showUvp = d.showUvp !== false && pct !== null && pct >= 1;
+        const bullets = (d.bullets || []).filter((b) => String(b).trim());
+        const qrSrc = d.qrUrl ? base + '/api/qr?text=' + encodeURIComponent(d.qrUrl) : '';
+        const logoSrc = logoSrcFor(d, base);
+        const out = [];
+        out.push(`<div class="pt pt-pdf" data-template="${S.id}" style="width:${W}mm;height:${H}mm"><img class="pt-bg" src="${base}${S.bg}" alt="">`);
+        if (F.qr) out.push(`<div class="pt-f pt-qr" data-field="qr" style="${pos('qr')}">${qrSrc ? `<img src="${qrSrc}" alt="">` : ''}</div>`);
+        if (F.logo) out.push(`<div class="pt-f pt-logo" data-field="logo" style="${pos('logo')}">${logoSrc ? `<img src="${logoSrc}" alt="">` : '<span class="pt-ph">Logo</span>'}</div>`);
+        if (F.group) out.push(`<div class="pt-f pt-t pt-fit1 s-${F.group.style}" data-field="group" style="${pos('group')}${textStyle(F.group)}"><span>${esc(d.group)}</span></div>`);
+        if (F.name) {
+          out.push(two
+            ? `<div class="pt-f pt-t pt-t2 pt-fitn s-${F.name.style}" data-field="name" style="${pos('name')}${textStyle(F.name)}line-height:${r2(namePitch / F.name.size * 100) / 100}">${esc(d.name)}</div>`
+            : `<div class="pt-f pt-t pt-fit1 s-${F.name.style}" data-field="name" style="${pos('name')}${textStyle(F.name)}"><span>${esc(d.name)}</span></div>`);
+        }
+        if (F.artnr) {
+          const a = F.artnr;
+          const inner = !d.artnr ? '' : a.numx != null
+            ? `Art.Nr.:<span style="position:absolute;left:${a.numx}mm;top:0">${esc(d.artnr)}</span>`
+            : `Art.Nr.: ${esc(d.artnr)}`;
+          out.push(`<div class="pt-f pt-t s-${a.style}" data-field="artnr" style="${pos('artnr')}${textStyle(a)}">${inner}</div>`);
+        }
+        if (F.bullets) {
+          const b = F.bullets;
+          const lh = b.pitch / b.size, ind = b.indent / b.size;
+          out.push(`<div class="pt-f pt-bul pt-fitb s-${b.style}" data-field="bullets" style="${pos('bullets')}${textStyle(b)}line-height:${lh.toFixed(3)}"><ul style="padding-left:${ind.toFixed(3)}em;--ind:${ind.toFixed(3)}em">${bullets.map((x) => `<li>${esc(x).replace(/(\S+-\S+)/g, '<span class="nb">$1</span>')}</li>`).join('')}</ul></div>`
+);
+        }
+        if (F.uvp) {
+          const u = F.uvp;
+          const val = { label: 'UVP', value: fmtUvpComma(d.uvp), pct: pct !== null ? pct + '%' : '' };
+          const texts = u.texts.map((t) => {
+            const txt = t.role === 'static' ? t.text : val[t.role];
+            const font = t.style === 'bco'
+              ? `font-family="PT Price" font-style="italic" font-weight="900" style="font-stretch:74%;font-variation-settings:'wdth' 74,'wght' 900"`
+              : `font-family="PT Text" font-weight="900"`;
+            return `<g class="pt-uvp-t" data-maxw="${t.maxw}"><text x="${t.cx}" y="${t.base}" fill="${t.color}" text-anchor="middle" font-size="${t.size}" ${font}>${esc(txt)}</text></g>`;
+          }).join('');
+          out.push(`<div class="pt-f pt-uvp" data-field="uvp" style="${pos('uvp')}${showUvp ? '' : 'visibility:hidden;'}"><svg viewBox="0 0 ${u.w} ${u.h}" preserveAspectRatio="none">${u.cells.map((c) => `<rect x="${c.x}" y="${c.y}" width="${c.w}" height="${c.h}" fill="${c.color}"/>`).join('')}${texts}</svg></div>`);
+        }
+        if (F.price) {
+          const p = F.price;
+          out.push(`<div class="pt-f pt-price" data-field="price" data-price="${d.price > 0 ? Number(d.price).toFixed(2) : ''}" data-pfont="${r2(p.cap / 0.694)}" data-pcx="${p.cx}" data-pbase="${p.base}" style="${pos('price')}"></div>`);
+        }
+        out.push('</div>');
+        return out.join('\n');
+      },
+    };
+  }
+  (window.PT_PDF_SPECS || []).forEach((S) => { Templates[S.id] = pdfTemplate(S); });
+
+  // Gruppen für die Vorlagen-Auswahl (nach Format, groß -> klein)
+  Templates['expert-a5'].group = 'A5 hoch';
+  for (const id of ['quer', 'blister', 'schiene']) Templates[id].group = 'Weitere';
+  const GROUP_ORDER = ['A4 hoch', 'A4 quer', 'A5 hoch', 'A5 quer', 'Mittel hoch', 'A6 hoch', 'A7 quer', 'Weitere'];
+
+  /* ------------------------------------------------------------------ */
   /* Preis mit weißer Umrandung + Schatten (wie Original)                */
   /* ------------------------------------------------------------------ */
   const SVGNS = 'http://www.w3.org/2000/svg';
@@ -443,7 +566,9 @@
     }
   }
   function fitMulti(box) {
-    box.style.fontSize = '';
+    // Ausgangsgröße merken (manche Vorlagen setzen sie inline), dann von dort aus verkleinern
+    if (box.dataset.fs == null) box.dataset.fs = box.style.fontSize || '';
+    box.style.fontSize = box.dataset.fs;
     const base = parseFloat(getComputedStyle(box).fontSize);
     let size = base;
     let guard = 0;
@@ -451,6 +576,23 @@
       size *= 0.97;
       box.style.fontSize = size + 'px';
     }
+  }
+
+  // Eigenschaften der PDF-Vorlagen: höchstens auf 75 % verkleinern, danach – wie im bisherigen System –
+  // die hinteren Punkte weglassen, statt alles unlesbar klein zu machen
+  function fitBullets(box) {
+    if (box.dataset.fs == null) box.dataset.fs = box.style.fontSize || '';
+    box.style.fontSize = box.dataset.fs;
+    const lis = [...box.querySelectorAll('li')];
+    lis.forEach((li) => { li.style.display = ''; });
+    const base = parseFloat(getComputedStyle(box).fontSize);
+    let size = base;
+    let guard = 0;
+    while (box.scrollHeight > box.clientHeight + 0.5 && size > base * 0.75 && guard++ < 40) {
+      size *= 0.97;
+      box.style.fontSize = size + 'px';
+    }
+    for (let n = lis.length - 1; n > 0 && box.scrollHeight > box.clientHeight + 0.5; n--) lis[n].style.display = 'none';
   }
 
   function fitUvp(box) {
@@ -469,6 +611,7 @@
     root.querySelectorAll('.pt-uvp').forEach(fitUvp);
     root.querySelectorAll('.pt-fit1').forEach(fitOneLine);
     root.querySelectorAll('.pt-fitn').forEach(fitMulti);
+    root.querySelectorAll('.pt-fitb').forEach(fitBullets);
     root.querySelectorAll('.pt-price').forEach(buildPrice);
   }
 
@@ -477,6 +620,7 @@
       await Promise.all([
         document.fonts.load('italic 900 100px "PT Price"', '0123456789'),
         document.fonts.load('400 10px "PT Text"'), document.fonts.load('700 10px "PT Text"'),
+        document.fonts.load('500 10px "PT Text"'), document.fonts.load('900 10px "PT Text"'), document.fonts.load('400 10px "PT Sans"'),
       ]);
       await document.fonts.ready;
     } catch (_) { /* egal */ }
@@ -516,6 +660,6 @@
     return fitAll(box);
   }
 
-  window.PT = { Templates, fitTag, fitAll, savingsPercent, fmtUvp, esc, logoSrcFor, renderThumb };
+  window.PT = { Templates, GROUP_ORDER, fitTag, fitAll, savingsPercent, fmtUvp, esc, logoSrcFor, renderThumb };
   window.__fitAll = () => fitAll(document);
 })();
