@@ -100,7 +100,8 @@ Vorlagen liegen in `public/js/templates.js` (Aufbau) und `public/css/tag.css` (A
 
 Eine neue Vorlage braucht: `id`, `name`, `short` (Kürzel für die Liste, z. B. „A6“), `format`, `width`/`height` in mm, `fields` (verschiebbare Felder) und `render(tag)`. Optional: `description` und `sample` (eigene Beispieldaten für die Vorschau).
 
-Schriften (frei, dem Original am nächsten): Roboto Condensed für Texte, Archivo Black Italic schmal für Preis und UVP-Box.
+Schriften: Roboto Condensed für Texte (frei, dem Original am nächsten), Archivo Black Italic schmal für die UVP-Box.
+**Preis-Ziffern** sind aus der Vorlage `dev/ziffern-vorlage.png` nachgezeichnet (`public/js/price-glyphs.js`, Werkzeuge in `dev/ziffern/`) und sehen dadurch genau wie auf den Original-Schildern aus.
 
 ## Technik
 

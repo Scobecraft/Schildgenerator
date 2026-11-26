@@ -909,7 +909,7 @@
   .sheet.L{page:landscape}
 </style></head><body>
 ${pages.map((p) => sheetHtml(p, opt)).join('\n')}
-<script src="/js/templates.js"></script>
+<script src="/js/price-glyphs.js"></script><script src="/js/templates.js"></script>
 </body></html>`;
   }
 

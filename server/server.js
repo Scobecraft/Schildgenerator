@@ -22,7 +22,11 @@ const HOST = process.env.HOST || '0.0.0.0'; // auf dem Server: 127.0.0.1 (nur ü
 const app = express();
 app.use(express.json({ limit: '60mb' }));
 app.use(express.static(path.join(__dirname, '..', 'public'), {
-  setHeaders: (res, file) => { if (file.endsWith('.wasm')) res.type('application/wasm'); },
+  setHeaders: (res, file) => {
+    if (file.endsWith('.wasm')) res.type('application/wasm');
+    // Programmdateien immer auf neue Version prüfen lassen (nach Updates keine alten Stände aus dem Cache)
+    if (/\.(html|js|css)$/.test(file)) res.set('Cache-Control', 'no-cache');
+  },
 }));
 
 // ---------- Logo-Bibliothek (hochauflösende PNGs pro Marke) ----------

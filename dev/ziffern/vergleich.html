@@ -1,0 +1,13 @@
+<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;background:#fff}</style></head><body>
+<svg id="s" width="1161" height="257" viewBox="0 0 1161 257"></svg>
+<script src="/js/price-glyphs.js"></script>
+<script>
+// Ziffernreihe genau wie in der Vorlage (1 Einheit = 151/1000 px, Grundlinie bei y=208, Start x=85)
+const GL = window.PT_PRICE_GLYPHS, S = 152 / 1000, NS = 'http://www.w3.org/2000/svg';
+const svg = document.getElementById('s');
+let x = 85;
+const put = (d, x0) => { const p = document.createElementNS(NS, 'path'); p.setAttribute('d', d); p.setAttribute('fill', '#005baa'); p.setAttribute('fill-rule', 'evenodd'); p.setAttribute('transform', `translate(${x0} 208) scale(${S})`); svg.appendChild(p); };
+for (const ch of '1234567890') { put(GL.g[ch].d, x); x += GL.g[ch].adv * S; }
+put(GL.dot.d, x); put(GL.dash.d, x + GL.dash.dx * S);
+document.body.dataset.ready = 1;
+</script></body></html>

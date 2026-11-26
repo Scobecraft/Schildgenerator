@@ -222,7 +222,7 @@
   <div class="pt-bl-head"></div>
   <div class="pt-f pt-bl-brand pt-fit1" data-field="brand" style="${pos('brand')}"><span>${esc(d.brand || '')}</span></div>
   <div class="pt-f pt-bl-name pt-fit1" data-field="name" style="${pos('name')}"><span>${esc(d.name)}</span></div>
-  <div class="pt-f pt-price" data-field="price" data-price="${d.price > 0 ? Number(d.price).toFixed(2) : ''}" data-pfont="14.4" data-pcx="24.7" data-pbase="19.2" style="${pos('price')}"></div>
+  <div class="pt-f pt-price" data-field="price" data-price="${d.price > 0 ? Number(d.price).toFixed(2) : ''}" data-pfont="15.1" data-pcx="25.2" data-pbase="19.2" style="${pos('price')}"></div>
   <div class="pt-f pt-bl-artnr" data-field="artnr" style="${pos('artnr')}">${esc(d.artnr || '')}</div>
 </div>`;
     },
@@ -261,7 +261,7 @@
   <div class="pt-f pt-sc-group pt-fit1" data-field="group" style="${pos('group')}"><span>${esc(d.group)}</span></div>
   <div class="pt-f pt-sc-name pt-fit1" data-field="name" style="${pos('name')}"><span>${esc(d.name)}</span></div>
   <div class="pt-f pt-sc-artnr" data-field="artnr" style="${pos('artnr')}">${esc(d.artnr || '')}</div>
-  <div class="pt-f pt-price" data-field="price" data-price="${d.price > 0 ? Number(d.price).toFixed(2) : ''}" data-pfont="17" data-pcx="20.9" data-pbase="19.8" style="${pos('price')}"></div>
+  <div class="pt-f pt-price" data-field="price" data-price="${d.price > 0 ? Number(d.price).toFixed(2) : ''}" data-pfont="17.76" data-pcx="21.05" data-pbase="20.25" style="${pos('price')}"></div>
 </div>`;
     },
   };
@@ -321,7 +321,7 @@
       </g>
     </svg>
   </div>
-  <div class="pt-f pt-price" data-field="price" data-price="${d.price > 0 ? Number(d.price).toFixed(2) : ''}" data-pfont="23" data-pcx="27.3" data-pbase="20.7" style="${pos('price')}"></div>
+  <div class="pt-f pt-price" data-field="price" data-price="${d.price > 0 ? Number(d.price).toFixed(2) : ''}" data-pfont="23" data-pcx="27.73" data-pbase="20.15" style="${pos('price')}"></div>
 </div>`;
     },
   };
@@ -330,9 +330,12 @@
   /* Preis mit weißer Umrandung + Schatten (wie Original)                */
   /* ------------------------------------------------------------------ */
   const SVGNS = 'http://www.w3.org/2000/svg';
+  const CENT_X = 0.0;     // Beginn der Cents relativ zum Punkt, in Ziffernhöhen (am Original gemessen)
+  const CENT_SPACE = 1.09; // Cents stehen etwas weiter auseinander als die großen Ziffern
+  const DOT_X = -0.035;    // Punkt leicht nach links, in Ziffernhöhen
   const PRICE = {
     font: 51.3,          // Schriftgröße in mm
-    stroke: 3.4,       // Breite der weißen Kontur (gesamt, mittig) in mm
+    stroke: 6.55,      // Breite der weißen Kontur (gesamt, mittig) in mm – je Seite ≈ 9 % der Ziffernhöhe wie im Original
     track: -0.6,       // Ziffernabstand in mm (negativ = überlappend wie im Original)
     dotGap: 1.2,       // Abstand letzte Ziffer -> ".-"
     centerX: 48.8,     // horizontale Mitte der Preisgruppe innerhalb des Preisfelds (mm)
@@ -344,27 +347,6 @@
     const e = document.createElementNS(SVGNS, name);
     for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v);
     return e;
-  }
-
-  function skewPoly(x, y, w, h, skewDeg) {
-    // Parallelogramm (kursiv) mit Grundlinie y+h
-    const t = Math.tan((skewDeg * Math.PI) / 180);
-    const p = [[x + h * t, y], [x + w + h * t, y], [x + w, y + h], [x, y + h]];
-    return p.map((q) => q.map((v) => v.toFixed(3)).join(',')).join(' ');
-  }
-
-  // Sichtbare (Tinten-)Grenzen einer Ziffer der Preisschrift, relativ zum Zeichenursprung
-  const inkCache = {};
-  let inkCtx = null;
-  function glyphInk(ch, size) {
-    if (!inkCache[ch]) {
-      inkCtx = inkCtx || document.createElement('canvas').getContext('2d');
-      inkCtx.font = 'italic 900 200px "PT Price"';
-      try { inkCtx.fontStretch = 'extra-condensed'; } catch (_) { /* älterer Browser */ }
-      const m = inkCtx.measureText(ch);
-      inkCache[ch] = { l: -m.actualBoundingBoxLeft / 200, r: m.actualBoundingBoxRight / 200 };
-    }
-    return { l: inkCache[ch].l * size, r: inkCache[ch].r * size };
   }
 
   function buildPrice(box) {
@@ -396,60 +378,42 @@
     svg.appendChild(g);
     box.appendChild(svg);
 
-    const textAttrs = (size) => ({
-      'font-family': 'PT Price', 'font-style': 'italic', 'font-weight': '900', 'font-size': size,
-      style: 'font-stretch:62%;font-variation-settings:"wdth" 62,"wght" 900;font-feature-settings:"pnum" 1;font-variant-numeric:proportional-nums',
-    });
-
-    // Ziffern nach ihrer sichtbaren Breite setzen (die Schrift hat nur gleich breite Ziffern,
-    // die Original-Schilder nutzen proportionale) – Abstände in Ziffernhöhen, am Original gemessen.
+    // Ziffern aus der nachgezeichneten Vorlage (public/js/price-glyphs.js).
+    // Schrittweiten wie im Vorlagenbild; Cents = 0,66 × Ziffernhöhe, oben bündig, Punkt darunter.
+    const GL = window.PT_PRICE_GLYPHS;
     const items = [];
-    const cap = P.font * 0.694;           // tatsächliche Ziffernhöhe
-    const skew = 12;
-    const t12 = Math.tan((skew * Math.PI) / 180);
-    const GAP_DIGIT = 0.073 * cap;        // Abstand zwischen großen Ziffern (sichtbare Kanten)
+    const cap = P.font * 0.694;           // Ziffernhöhe in mm
+    const S = cap / GL.cap;               // mm pro Glyphen-Einheit
     let cursor = 0;
-    let lastR = 0;
     for (const ch of String(euros)) {
-      const m = glyphInk(ch, P.font);
-      const gx = cursor - m.l;
-      items.push({ type: 'glyph', ch, x: gx, size: P.font });
-      lastR = gx + m.r;
-      cursor = lastR + GAP_DIGIT;
+      const gl = GL.g[ch];
+      items.push({ d: gl.d, x: cursor, y: 0, s: S });
+      cursor += gl.adv * S;
     }
-    const capH = P.font * 0.72;
+    const capH = cap;
     if (cents === 0) {
-      // ".-" als Balken (oben) und Quadrat (unten) wie im Original
-      const dotX = lastR + 0.09 * cap;
-      items.push({ type: 'poly', pts: skewPoly(dotX, -capH * 0.25, capH * 0.25, capH * 0.25, skew) });
-      const barBottom = -capH * 0.30;
-      const barH = capH * 0.24;
-      items.push({ type: 'poly', pts: skewPoly(dotX - barBottom * t12 + capH * 0.03, barBottom - barH, capH * 0.37, barH, skew) });
+      // ".-" genau wie in der Vorlage: Punkt unten, Strich darüber
+      items.push({ d: GL.dot.d, x: cursor, y: 0, s: S });
+      items.push({ d: GL.dash.d, x: cursor + GL.dash.dx * S, y: 0, s: S });
     } else {
-      // Punkt unten, kleinere Cents darüber hochgestellt (wie auf den expert-Schildern)
-      const dotX = lastR + 0.06 * cap;
-      items.push({ type: 'poly', pts: skewPoly(dotX, -cap * 0.26, cap * 0.2, cap * 0.26, skew) });
-      const cs = P.font * 0.57;
-      let cc = lastR + 0.0 * cap;
+      // Punkt unten, Cents (0,66 × Ziffernhöhe) oben bündig darüber
+      items.push({ d: GL.dot.d, x: cursor + DOT_X * cap, y: 0, s: S });
+      const cs = S * 0.66;
+      let cx = cursor + CENT_X * cap;
       for (const ch of String(cents).padStart(2, '0')) {
-        const m = glyphInk(ch, cs);
-        const gx = cc - m.l;
-        items.push({ type: 'glyph', ch, x: gx, size: cs, y: -cap + cs * 0.694 });
-        cc = gx + m.r + 0.09 * cap;
+        const gl = GL.g[ch];
+        items.push({ d: gl.d, x: cx, y: -cap + GL.cap * cs, s: cs });
+        cx += gl.adv * cs * CENT_SPACE;
       }
     }
 
     const inner = el('g');
     g.appendChild(inner);
+    const strokeU = P.stroke / S; // gleiche Konturstärke in Glyphen-Einheiten (Cents dadurch etwas dünner, wie im Original)
     for (const it of items) {
-      if (it.type === 'glyph') {
-        const common = { ...textAttrs(it.size), x: it.x, y: it.y || 0 };
-        inner.appendChild(Object.assign(el('text', { ...common, fill: '#fff', stroke: '#fff', 'stroke-width': P.stroke * (it.size / P.font), 'stroke-linejoin': 'round' }), { textContent: it.ch }));
-        inner.appendChild(Object.assign(el('text', { ...common, fill: P.blue }), { textContent: it.ch }));
-      } else {
-        inner.appendChild(el('polygon', { points: it.pts, fill: '#fff', stroke: '#fff', 'stroke-width': P.stroke, 'stroke-linejoin': 'round' }));
-        inner.appendChild(el('polygon', { points: it.pts, fill: P.blue }));
-      }
+      const tr = `translate(${it.x.toFixed(3)} ${it.y.toFixed(3)}) scale(${it.s.toFixed(5)})`;
+      inner.appendChild(el('path', { d: it.d, transform: tr, fill: '#fff', 'fill-rule': 'evenodd', stroke: '#fff', 'stroke-width': strokeU.toFixed(1), 'stroke-linejoin': 'round' }));
+      inner.appendChild(el('path', { d: it.d, transform: tr, fill: P.blue, 'fill-rule': 'evenodd' }));
     }
     // Position: Mitte wie im Original, bei Bedarf verkleinern, damit es ins Feld passt
     const bb = inner.getBBox();
