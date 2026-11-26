@@ -595,11 +595,71 @@
     for (let n = lis.length - 1; n > 0 && box.scrollHeight > box.clientHeight + 0.5; n--) lis[n].style.display = 'none';
   }
 
+  // Ziffernhöhe der UVP-Schrift im Verhältnis zur Schriftgröße (einmal im Browser gemessen)
+  let uvpCapRatio = null;
+  function measureUvpCap() {
+    if (uvpCapRatio) return uvpCapRatio;
+    try {
+      const c = document.createElement('canvas').getContext('2d');
+      c.font = 'italic 900 100px "PT Price"';
+      const m = c.measureText('0');
+      if (m.actualBoundingBoxAscent > 30) uvpCapRatio = m.actualBoundingBoxAscent / 100;
+    } catch (_) { /* Rückfall unten */ }
+    return uvpCapRatio || 0.72;
+  }
+
+  // Zahlen in der UVP-Box mit denselben nachgezeichneten Ziffern wie der große Preis zeichnen
+  // (die Schrift hat z. B. eine andere "4"). Buchstaben, Komma, Strich und % bleiben aus der Schrift.
+  function glyphUvpText(t, maxW) {
+    const GL = window.PT_PRICE_GLYPHS;
+    const parent = t.parentNode;
+    const old = parent.querySelector(`[data-glyph-for="${t.dataset.gid}"]`);
+    if (old) old.remove();
+    t.style.display = '';
+    const txt = t.textContent;
+    if (!GL || !/\d/.test(txt)) return false;
+    if (!t.dataset.gid) t.dataset.gid = Math.random().toString(36).slice(2);
+    const cs = getComputedStyle(t);
+    const size = parseFloat(t.getAttribute('font-size')) || parseFloat(cs.fontSize);
+    const S = (size * measureUvpCap()) / GL.cap;
+    const g = el('g', { 'data-glyph-for': t.dataset.gid });
+    parent.appendChild(g);
+    const inner = el('g');
+    g.appendChild(inner);
+    const fill = t.getAttribute('fill') || cs.fill;
+    let x = 0;
+    for (const ch of txt) {
+      const gl = /\d/.test(ch) && GL.g[ch];
+      if (gl) {
+        inner.appendChild(el('path', { d: gl.d, transform: `translate(${x.toFixed(3)} 0) scale(${S.toFixed(5)})`, fill, 'fill-rule': 'evenodd' }));
+        x += gl.adv * S;
+      } else {
+        const c = t.cloneNode(false);
+        ['x', 'y', 'text-anchor', 'textLength', 'lengthAdjust', 'data-gid'].forEach((a) => c.removeAttribute(a));
+        c.style.display = '';
+        c.setAttribute('x', x.toFixed(3));
+        c.setAttribute('y', '0');
+        c.setAttribute('text-anchor', 'start');
+        c.textContent = ch;
+        inner.appendChild(c);
+        x += c.getComputedTextLength();
+      }
+    }
+    const cx = parseFloat(t.getAttribute('x')) || 0;
+    const base = parseFloat(t.getAttribute('y')) || 0;
+    const sx = x > maxW ? maxW / x : 1;
+    g.setAttribute('transform', `translate(${(cx - (x * sx) / 2).toFixed(3)} ${base}) scale(${sx.toFixed(4)} 1)`);
+    t.style.display = 'none';
+    return true;
+  }
+
   function fitUvp(box) {
     box.querySelectorAll('.pt-uvp-t text').forEach((t) => {
+      if (t.closest('[data-glyph-for]')) return;
       const maxW = parseFloat(t.parentNode.getAttribute('data-maxw')) || UVPT.maxW;
       t.removeAttribute('textLength');
       t.removeAttribute('lengthAdjust');
+      if (glyphUvpText(t, maxW)) return;
       if (t.getComputedTextLength() > maxW) {
         t.setAttribute('textLength', maxW);
         t.setAttribute('lengthAdjust', 'spacingAndGlyphs');
