@@ -16,11 +16,16 @@ const { lookup, getBrowser, closeBrowser, STORE_ID } = require('./expert');
 const { prepareLogo } = require('./logo');
 const system = require('./system');
 const watch = require('./watch');
+const auth = require('./auth');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0'; // auf dem Server: 127.0.0.1 (nur über nginx erreichbar)
 const app = express();
+app.set('trust proxy', 'loopback'); // hinter nginx/Cloudflare-Tunnel: https-Erkennung für das Cookie
 app.use(express.json({ limit: '60mb' }));
+// Anmeldung: alles außer der Anmeldeseite braucht ein gültiges Konto
+app.use(auth.middleware);
+auth.routes(app);
 app.use(express.static(path.join(__dirname, '..', 'public'), {
   setHeaders: (res, file) => {
     if (file.endsWith('.wasm')) res.type('application/wasm');
@@ -296,6 +301,13 @@ app.post('/api/pdf', async (req, res) => {
   const browser = await getBrowser();
   const page = await browser.newPage();
   try {
+    // der Druck-Browser meldet sich mit einem internen Schlüssel an – nur bei Anfragen an diesen Server
+    const own = `http://127.0.0.1:${PORT}/`;
+    await page.route('**/*', (route) => {
+      const r = route.request();
+      if (r.url().startsWith(own)) return route.continue({ headers: { ...r.headers(), 'x-internal-token': auth.INTERNAL_TOKEN } });
+      return route.continue();
+    });
     await page.goto(`http://127.0.0.1:${PORT}/print/${id}`, { waitUntil: 'networkidle', timeout: 120000 });
     await page.evaluate(() => document.fonts.ready);
     await page.evaluate(() => window.__fitAll && window.__fitAll());

@@ -81,6 +81,26 @@ Pro Schild umschaltbar zwischen **Original** (Standard) und **Hochskaliert**. Ho
 | Ersparnis | (UVP − Preis) / UVP, abgerundet |
 | QR-Code | expert.de-Produktseite mit Markt Asbach |
 
+## Anmeldung
+
+Die Seite ist nur mit **Benutzername und Passwort** nutzbar.
+
+- **Erster Aufruf:** Gibt es noch kein Konto, zeigt die Anmeldeseite „Erstes Konto anlegen“. Dieses Konto ist Administrator.
+  → Das erste Konto direkt nach der Installation anlegen, **bevor** die Seite (z. B. über Cloudflare) öffentlich erreichbar ist.
+- **Konto-Knopf** oben rechts: abmelden, eigenes Passwort ändern. Administratoren legen dort weitere Benutzer an, setzen Passwörter, vergeben Admin-Rechte und löschen Benutzer.
+- Angemeldet bleibt man 30 Tage (verlängert sich bei Nutzung). Nach einer Passwortänderung sind alle anderen Geräte dieses Kontos abgemeldet.
+- Schutz gegen Durchprobieren: 15 Minuten Sperre nach 8 falschen Passwörtern für einen Benutzernamen (bzw. 30 von einer Adresse).
+- Passwörter werden nur als scrypt-Hash gespeichert (`data/users.json`), Sitzungen in `data/sessions.json`.
+
+**Passwort vergessen?** Auf dem Server im Ordner `~/schildgenerator`:
+
+```bash
+docker compose exec schildgenerator node server/users.js list
+docker compose exec schildgenerator node server/users.js passwd <name> <neues-passwort>
+```
+
+Weitere Befehle: `add <name> <passwort> [admin]`, `del <name>`, `admin <name> ja|nein`.
+
 ## Vorlagen
 
 Vorlagen liegen in `public/js/templates.js` (Aufbau) und `public/css/tag.css` (Aussehen). Aktuell:

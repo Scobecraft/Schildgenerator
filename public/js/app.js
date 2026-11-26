@@ -266,6 +266,21 @@
     setTimeout(() => el.remove(), kind === 'err' ? 7000 : 3500);
   }
 
+  // Sitzung abgelaufen / abgemeldet -> zur Anmeldeseite (gilt für alle Anfragen der Seite)
+  const rawFetch = window.fetch.bind(window);
+  let goingToLogin = false;
+  window.fetch = async (...args) => {
+    const r = await rawFetch(...args);
+    if (r.status === 401 && !goingToLogin) {
+      const u = String(args[0] && args[0].url || args[0]);
+      if (u.startsWith('/') && !/\/api\/(login|password)$/.test(u)) {
+        goingToLogin = true;
+        location.href = '/login?next=' + encodeURIComponent(location.pathname + location.search);
+      }
+    }
+    return r;
+  };
+
   async function api(url, opts) {
     const r = await fetch(url, opts);
     const ct = r.headers.get('content-type') || '';
@@ -1650,6 +1665,89 @@ ${pages.map((p) => sheetHtml(p, opt)).join('\n')}
   document.addEventListener('visibilitychange', pollSystem);
 
   // ---------------------------------------------------------------- Dunkelmodus
+
+  // ---------------------------------------------------------------- Konto & Benutzer
+  let me = null;
+  async function loadMe() {
+    try { me = await api('/api/me', { cache: 'no-store' }); } catch (_) { return; }
+    $('#userName').textContent = me.name;
+  }
+  const jsonPost = (url, body, method = 'POST') => api(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+
+  async function renderUsers() {
+    if (!me || !me.admin) return;
+    const users = await api('/api/users', { cache: 'no-store' });
+    $('#userList').innerHTML = users.map((u) => `
+      <li class="user-row" data-user="${esc(u.name)}">
+        <div class="user-row-name"><b>${esc(u.name)}</b>${u.admin ? ' <span class="pill pill-orange">Administrator</span>' : ''}${u.name.toLowerCase() === me.name.toLowerCase() ? ' <span class="muted">(du)</span>' : ''}</div>
+        <div class="user-row-actions">
+          <button type="button" class="link" data-act="pw">Passwort setzen</button>
+          ${u.name.toLowerCase() === me.name.toLowerCase() ? '' : `<button type="button" class="link" data-act="admin">${u.admin ? 'Admin-Recht entziehen' : 'Zum Admin machen'}</button>
+          <button type="button" class="link danger" data-act="del">Löschen</button>`}
+        </div>
+      </li>`).join('');
+  }
+
+  $('#btnUser').addEventListener('click', async () => {
+    await loadMe();
+    if (!me) return;
+    $('#userMe').textContent = me.name;
+    $('#userMeAdmin').hidden = !me.admin;
+    $('#userAdmin').hidden = !me.admin;
+    ['#pwCurrent', '#pwNew', '#pwNew2', '#nuName', '#nuPw'].forEach((id) => { $(id).value = ''; });
+    $('#nuAdmin').checked = false;
+    $('#userDialog').showModal();
+    try { await renderUsers(); } catch (e) { toast(e.message, 'err'); }
+  });
+
+  $('#btnLogout').addEventListener('click', async () => {
+    try { await jsonPost('/api/logout'); } catch (_) { /* egal */ }
+    location.href = '/login';
+  });
+
+  $('#btnPwChange').addEventListener('click', async () => {
+    if ($('#pwNew').value !== $('#pwNew2').value) return toast('Die beiden neuen Passwörter sind nicht gleich.', 'err');
+    try {
+      await jsonPost('/api/password', { current: $('#pwCurrent').value, password: $('#pwNew').value });
+      ['#pwCurrent', '#pwNew', '#pwNew2'].forEach((id) => { $(id).value = ''; });
+      toast('Passwort geändert.', 'ok');
+    } catch (e) { toast(e.message, 'err'); }
+  });
+
+  $('#btnUserAdd').addEventListener('click', async () => {
+    try {
+      await jsonPost('/api/users', { name: $('#nuName').value, password: $('#nuPw').value, admin: $('#nuAdmin').checked });
+      toast(`Benutzer „${$('#nuName').value.trim()}“ angelegt.`, 'ok');
+      $('#nuName').value = ''; $('#nuPw').value = ''; $('#nuAdmin').checked = false;
+      await renderUsers();
+    } catch (e) { toast(e.message, 'err'); }
+  });
+
+  $('#userList').addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-act]');
+    if (!btn) return;
+    const name = btn.closest('[data-user]').dataset.user;
+    const url = '/api/users/' + encodeURIComponent(name);
+    try {
+      if (btn.dataset.act === 'pw') {
+        const pw = prompt(`Neues Passwort für „${name}“ (mind. 8 Zeichen):`);
+        if (!pw) return;
+        await jsonPost(url + '/password', { password: pw });
+        toast(`Passwort von „${name}“ gesetzt. ${name.toLowerCase() === me.name.toLowerCase() ? '' : 'Der Benutzer ist auf allen Geräten abgemeldet.'}`, 'ok');
+        if (name.toLowerCase() === me.name.toLowerCase()) location.href = '/login';
+      } else if (btn.dataset.act === 'admin') {
+        const isAdmin = !!btn.closest('[data-user]').querySelector('.pill');
+        await jsonPost(url + '/admin', { admin: !isAdmin });
+      } else if (btn.dataset.act === 'del') {
+        if (!confirm(`Benutzer „${name}“ wirklich löschen?`)) return;
+        await api(url, { method: 'DELETE' });
+        toast(`Benutzer „${name}“ gelöscht.`, 'ok');
+      }
+      await renderUsers();
+    } catch (err) { toast(err.message, 'err'); }
+  });
+  loadMe();
+
   function setTheme(t) {
     document.documentElement.setAttribute('data-theme', t);
     try { localStorage.setItem('schildgenerator.theme', t); } catch (_) { /* egal */ }

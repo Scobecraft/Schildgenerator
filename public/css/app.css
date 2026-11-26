@@ -362,3 +362,20 @@ body, .topbar, .panel, .card, .tag-item, .btn, textarea, input, select, .stage-t
 }
 .tpl-grid .tpl-group { grid-column: 1 / -1; font-weight: 700; font-size: 13px; letter-spacing: .04em; text-transform: uppercase; color: var(--orange); padding: 10px 2px 0; border-bottom: 1px solid var(--line); }
 .tpl-grid .tpl-group:first-child { padding-top: 0; }
+
+/* Konto / Benutzer */
+.user-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; }
+.user-btn span { max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+#userDialog { width: min(560px, calc(100vw - 32px)); }
+.user-modal { gap: 0; overflow-y: auto; }
+.user-modal h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 18px 0 8px; }
+.user-me { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+.user-form { display: flex; flex-direction: column; gap: 8px; }
+.user-form input:not([type=checkbox]) { height: 38px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--input); color: var(--text); font: inherit; }
+.user-form input:focus { outline: none; border-color: var(--orange); }
+.user-form .btn { align-self: flex-start; }
+.user-note { font-size: 12px; margin: 6px 0 0; }
+.user-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.user-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.user-row-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+@media (max-width: 760px) { .user-btn span { display: none; } .user-btn { padding: 0 10px; } }
