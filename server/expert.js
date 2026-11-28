@@ -262,6 +262,12 @@ async function lookupInternal(query) {
         shownOnPage: shown ? shown.text : null,
       },
       expertUvp,
+      // Streich-/Statt-Preis von expert.de (kein UVP), z. B. bei Aktionen – nur als Vorschlag fürs Angebot
+      expertWas: (() => {
+        const st = String(info.formerPriceState || '').trim();
+        const f = Number(info.formerBruttoPrice);
+        return st && !/^uvp$/i.test(st) && f > price ? { price: Math.round(f * 100) / 100, state: st } : null;
+      })(),
       warnings,
     };
   } finally {

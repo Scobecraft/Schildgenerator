@@ -379,3 +379,10 @@ body, .topbar, .panel, .card, .tag-item, .btn, textarea, input, select, .stage-t
 .user-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; }
 .user-row-actions { display: flex; gap: 12px; flex-wrap: wrap; }
 @media (max-width: 760px) { .user-btn span { display: none; } .user-btn { padding: 0 10px; } }
+
+/* Angebot */
+.offer-box { margin: 10px 0; padding: 10px 12px; border: 1px dashed var(--line-strong); border-radius: 10px; display: flex; flex-direction: column; gap: 8px; }
+.offer-box.on { border-style: solid; border-color: #e3000f; background: rgba(227, 0, 15, .04); }
+.offer-box .btn { align-self: flex-start; }
+.offer-toggle b { color: #e3000f; }
+.tag-was { color: #e3000f; font-weight: 500; font-size: .85em; }

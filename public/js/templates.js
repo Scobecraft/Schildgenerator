@@ -18,6 +18,11 @@
 
   const Templates = {};
 
+  // Angebot: Originalpreis (wird durchgestrichen neben dem Preis gezeigt), nur wenn höher als der Preis
+  function wasAttr(d) {
+    return d && d.offer === true && d.wasPrice > 0 && d.price > 0 && d.wasPrice > d.price ? ` data-was="${Number(d.wasPrice).toFixed(2)}"` : '';
+  }
+
   // Bildquelle des Herstellerlogos – Original (Standard) oder hochskaliert (d.logoUpscale)
   function logoSrcFor(d, base = '') {
     const up = d.logoUpscale === true;
@@ -102,7 +107,7 @@
       </g>
     </svg>
   </div>
-  <div class="pt-f pt-price" data-field="price" data-price="${d.price > 0 ? Number(d.price).toFixed(2) : ''}" style="${pos('price')}"></div>
+  <div class="pt-f pt-price" data-field="price" data-price="${d.price > 0 ? Number(d.price).toFixed(2) : ''}"${wasAttr(d)} style="${pos('price')}"></div>
 
   <div class="pt-bar pt-bar-bottom"></div>
 </div>`;
@@ -225,7 +230,7 @@
   <div class="pt-bl-head"></div>
   <div class="pt-f pt-bl-brand pt-fit1" data-field="brand" style="${pos('brand')}"><span>${esc(d.brand || '')}</span></div>
   <div class="pt-f pt-bl-name pt-fitn" data-field="name" style="${pos('name')}">${name}</div>
-  <div class="pt-f pt-price" data-field="price" data-price="${d.price > 0 ? Number(d.price).toFixed(2) : ''}"
+  <div class="pt-f pt-price" data-field="price" data-price="${d.price > 0 ? Number(d.price).toFixed(2) : ''}"${wasAttr(d)}
     data-pfill="1" data-ptop-from="name" data-pgap="2.87" data-pfont="15.3" data-pcx="25.19" data-pbase="22.85" data-pmaxw="48"
     data-pcs="0.70" data-pcy="-0.052" data-pcx0="0.04" data-pcsp="0.986" data-pdx="-0.007" data-pdy="-0.052" style="${pos('price')}"></div>
   <div class="pt-f pt-bl-artnr" data-field="artnr" style="${pos('artnr')}">${esc(d.artnr || '')}</div>
@@ -266,7 +271,7 @@
   <div class="pt-f pt-sc-group pt-fit1" data-field="group" style="${pos('group')}"><span>${esc(d.group)}</span></div>
   <div class="pt-f pt-sc-name pt-fit1" data-field="name" style="${pos('name')}"><span>${esc(d.name)}</span></div>
   <div class="pt-f pt-sc-artnr" data-field="artnr" style="${pos('artnr')}">${esc(d.artnr || '')}</div>
-  <div class="pt-f pt-price" data-field="price" data-price="${d.price > 0 ? Number(d.price).toFixed(2) : ''}" data-pfont="17.76" data-pcx="21.05" data-pbase="20.25" style="${pos('price')}"></div>
+  <div class="pt-f pt-price" data-field="price" data-price="${d.price > 0 ? Number(d.price).toFixed(2) : ''}"${wasAttr(d)} data-pfont="17.76" data-pcx="21.05" data-pbase="20.25" style="${pos('price')}"></div>
 </div>`;
     },
   };
@@ -326,7 +331,7 @@
       </g>
     </svg>
   </div>
-  <div class="pt-f pt-price" data-field="price" data-price="${d.price > 0 ? Number(d.price).toFixed(2) : ''}" data-pfont="23" data-pcx="27.73" data-pbase="20.15" style="${pos('price')}"></div>
+  <div class="pt-f pt-price" data-field="price" data-price="${d.price > 0 ? Number(d.price).toFixed(2) : ''}"${wasAttr(d)} data-pfont="23" data-pcx="27.73" data-pbase="20.15" style="${pos('price')}"></div>
 </div>`;
     },
   };
@@ -440,7 +445,7 @@
         }
         if (F.price) {
           const p = F.price;
-          out.push(`<div class="pt-f pt-price" data-field="price" data-price="${d.price > 0 ? Number(d.price).toFixed(2) : ''}" data-pfont="${r2(p.cap / 0.694)}" data-pcx="${p.cx}" data-pbase="${p.base}" style="${pos('price')}"></div>`);
+          out.push(`<div class="pt-f pt-price" data-field="price" data-price="${d.price > 0 ? Number(d.price).toFixed(2) : ''}"${wasAttr(d)} data-pfont="${r2(p.cap / 0.694)}" data-pcx="${p.cx}" data-pbase="${p.base}" style="${pos('price')}"></div>`);
         }
         out.push('</div>');
         return out.join('\n');
@@ -469,6 +474,15 @@
     centerX: 48.8,     // horizontale Mitte der Preisgruppe innerhalb des Preisfelds (mm)
     baseline: 45.4,    // Grundlinie innerhalb des Preisfelds (mm)
     blue: '#0562af',
+  };
+
+  // Angebot: durchgestrichener Originalpreis neben dem Preis
+  const WAS = {
+    size: 0.5,       // Ziffernhöhe im Verhältnis zum Preis
+    gap: 0.06,       // Abstand zum Preis (in Ziffernhöhen des Preises, zusätzlich zu den Konturen)
+    color: '#1d1d1b',
+    strike: '#e3000f',
+    line: 0.085,     // Dicke der Streichlinie (in Ziffernhöhen des Originalpreises)
   };
 
   function el(name, attrs) {
@@ -512,40 +526,79 @@
     // Ziffern aus der nachgezeichneten Vorlage (public/js/price-glyphs.js).
     // Schrittweiten wie im Vorlagenbild; Cents = 0,66 × Ziffernhöhe, oben bündig, Punkt darunter.
     const GL = window.PT_PRICE_GLYPHS;
-    const items = [];
     const cap = P.font * 0.694;           // Ziffernhöhe in mm
     const S = cap / GL.cap;               // mm pro Glyphen-Einheit
-    let cursor = 0;
-    for (const ch of String(euros)) {
-      const gl = GL.g[ch];
-      items.push({ d: gl.d, x: cursor, y: 0, s: S });
-      cursor += gl.adv * S;
-    }
     const capH = cap;
-    if (cents === 0) {
-      // ".-" genau wie in der Vorlage: Punkt unten, Strich darüber
-      items.push({ d: GL.dot.d, x: cursor, y: 0, s: S });
-      items.push({ d: GL.dash.d, x: cursor + GL.dash.dx * S, y: 0, s: S });
-    } else {
-      // Punkt unten, Cents (0,66 × Ziffernhöhe) oben bündig darüber
-      items.push({ d: GL.dot.d, x: cursor + C.dot * cap, y: C.dotY * cap, s: S });
-      const cs = S * C.scale;
-      let cx = cursor + C.x * cap;
-      for (const ch of String(cents).padStart(2, '0')) {
+    // Glyphen eines Betrags (Grundlinie 0, links 0) für Ziffernhöhe c
+    function priceItems(v, c, x0, y0) {
+      const e = Math.floor(v + 1e-9);
+      const ct = Math.round((v - e) * 100);
+      const s1 = c / GL.cap;
+      const out = [];
+      let cursor = x0;
+      for (const ch of String(e)) {
         const gl = GL.g[ch];
-        items.push({ d: gl.d, x: cx, y: -cap + GL.cap * cs + C.dy * cap, s: cs });
-        cx += gl.adv * cs * C.space;
+        out.push({ d: gl.d, x: cursor, y: y0, s: s1 });
+        cursor += gl.adv * s1;
+      }
+      if (ct === 0) {
+        // ".-" genau wie in der Vorlage: Punkt unten, Strich darüber
+        out.push({ d: GL.dot.d, x: cursor, y: y0, s: s1 });
+        out.push({ d: GL.dash.d, x: cursor + GL.dash.dx * s1, y: y0, s: s1 });
+      } else {
+        // Punkt unten, Cents oben bündig darüber
+        out.push({ d: GL.dot.d, x: cursor + C.dot * c, y: y0 + C.dotY * c, s: s1 });
+        const cs = s1 * C.scale;
+        let cx = cursor + C.x * c;
+        for (const ch of String(ct).padStart(2, '0')) {
+          const gl = GL.g[ch];
+          out.push({ d: gl.d, x: cx, y: y0 - c + GL.cap * cs + C.dy * c, s: cs });
+          cx += gl.adv * cs * C.space;
+        }
+      }
+      return out;
+    }
+    const strokeU = P.stroke / S; // gleiche Konturstärke in Glyphen-Einheiten (Cents dadurch etwas dünner, wie im Original)
+    const inner = el('g');
+    g.appendChild(inner);
+    function draw(items, color, group) {
+      for (const it of items) {
+        const tr = `translate(${it.x.toFixed(3)} ${it.y.toFixed(3)}) scale(${it.s.toFixed(5)})`;
+        group.appendChild(el('path', { d: it.d, transform: tr, fill: '#fff', 'fill-rule': 'evenodd', stroke: '#fff', 'stroke-width': strokeU.toFixed(1), 'stroke-linejoin': 'round' }));
+        group.appendChild(el('path', { d: it.d, transform: tr, fill: color, 'fill-rule': 'evenodd' }));
       }
     }
 
-    const inner = el('g');
-    g.appendChild(inner);
-    const strokeU = P.stroke / S; // gleiche Konturstärke in Glyphen-Einheiten (Cents dadurch etwas dünner, wie im Original)
-    for (const it of items) {
-      const tr = `translate(${it.x.toFixed(3)} ${it.y.toFixed(3)}) scale(${it.s.toFixed(5)})`;
-      inner.appendChild(el('path', { d: it.d, transform: tr, fill: '#fff', 'fill-rule': 'evenodd', stroke: '#fff', 'stroke-width': strokeU.toFixed(1), 'stroke-linejoin': 'round' }));
-      inner.appendChild(el('path', { d: it.d, transform: tr, fill: P.blue, 'fill-rule': 'evenodd' }));
+    // Preis zuerst zeichnen (oben liegend), dann den Originalpreis links davor einfügen
+    const mainG = el('g');
+    inner.appendChild(mainG);
+    draw(priceItems(value, cap, 0, 0), P.blue, mainG);
+    // Angebot: Originalpreis kleiner links daneben, rot durchgestrichen; beides zusammen wird eingepasst
+    const was = parseFloat(box.dataset.was);
+    if (was > value) {
+      const wc = cap * WAS.size;
+      const wasG = el('g');
+      inner.insertBefore(wasG, mainG);
+      const mb = mainG.getBBox();
+      // vorläufig bei x=0 zeichnen, Breite messen, dann links neben den Preis schieben
+      const wItems = priceItems(was, wc, 0, -(cap - wc) / 2);
+      const tmp = el('g');
+      wasG.appendChild(tmp);
+      draw(wItems, WAS.color, tmp);
+      const wb = tmp.getBBox();
+      const gap = cap * WAS.gap;
+      // rechte Kante des Originalpreises (mit Kontur) bis zur linken Kante des Preises (mit Kontur)
+      const shift = mb.x - P.stroke / 2 - (wb.x + wb.width + (P.stroke * WAS.size) / 2) - gap;
+      tmp.setAttribute('transform', `translate(${shift.toFixed(3)} 0)`);
+      // Streichlinie: von unten links nach oben rechts über die Ziffern, weiß unterlegt
+      const x1 = wb.x + shift - wc * 0.08, x2 = wb.x + wb.width + shift + wc * 0.04;
+      const mid = -(cap - wc) / 2 - wc / 2; // Mitte der Ziffern
+      const yTop = mid - wc * 0.32, yBot = mid + wc * 0.32;
+      const lw = wc * WAS.line;
+      wasG.appendChild(el('line', { x1, y1: yBot, x2, y2: yTop, stroke: '#fff', 'stroke-width': (lw + P.stroke * WAS.size).toFixed(3), 'stroke-linecap': 'round' }));
+      wasG.appendChild(el('line', { x1, y1: yBot, x2, y2: yTop, stroke: WAS.strike, 'stroke-width': lw.toFixed(3), 'stroke-linecap': 'round' }));
     }
+
     // Modus "füllen" (z. B. Blister): Preis so groß wie der freie Platz erlaubt – wie im Original.
     // ptop = Oberkante der großen Ziffern, pbase = Grundlinie, pmaxw = maximale Breite (alles mm im Feld)
     if (box.dataset.pfill === '1') {

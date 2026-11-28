@@ -425,6 +425,7 @@
         fullName: r.fullName, brand: r.brand, manufacturer: r.manufacturer, logoBrand: r.logoBrand, logoSource: r.logoSource,
         expertLogoUrl: r.expertLogoUrl || (r.logoSource === 'expert' ? r.logoUrl : ''),
         storeStock: r.priceInfo && r.priceInfo.storeStock, shownOnPage: r.priceInfo && r.priceInfo.shownOnPage,
+        expertWas: r.expertWas || null,
       };
       t.warnings = r.warnings || [];
       t.status = 'ok';
@@ -475,7 +476,7 @@
     ul.innerHTML = state.tags.map((t) => `
       <li class="tag-item ${t.id === state.selectedId ? 'active' : ''}" data-id="${t.id}">
         <div class="tag-title">${statusDot(t)}<span>${esc(t.data.name || t.query || 'Neues Schild')}</span></div>
-        <div class="tag-price">${t.status === 'loading' ? '<span class="spinner"></span>' : euro(t.data.price)}</div>
+        <div class="tag-price">${t.status === 'loading' ? '<span class="spinner"></span>' : (t.data.offer && t.data.wasPrice > t.data.price ? `<s class="tag-was">${euro(t.data.wasPrice)}</s> ` : '') + euro(t.data.price)}</div>
         <div class="tag-sub"><span class="tpl-pill" title="${esc(tpl(t).name)}">${esc(tpl(t).short || tpl(t).name)}</span>${esc([t.data.group, t.data.artnr && 'Art.Nr. ' + t.data.artnr].filter(Boolean).join(' · ') || (t.status === 'loading' ? 'Wird von expert.de abgerufen…' : tpl(t).name))}</div>
         <div class="tag-actions">
           <span class="qty" title="Menge">
@@ -697,6 +698,24 @@
       </div>`;
   }
 
+  // Angebot: Originalpreis durchgestrichen neben dem Angebotspreis
+  function offerBlock(t) {
+    const d = t.data;
+    const ew = t.meta && t.meta.expertWas;
+    const on = d.offer === true;
+    const bad = on && d.wasPrice != null && d.price != null && !(d.wasPrice > d.price);
+    return `
+      <div class="offer-box ${on ? 'on' : ''}">
+        <label class="check offer-toggle"><input type="checkbox" data-k="offer" ${on ? 'checked' : ''}> <b>Angebot</b> – Originalpreis durchgestrichen daneben</label>
+        ${on ? `
+          <label class="ed-field"><span>Originalpreis (€) <span class="muted" style="font-weight:400">wird durchgestrichen</span></span>
+            <input type="number" step="0.01" min="0" data-k="wasPrice" value="${d.wasPrice != null ? d.wasPrice : ''}" placeholder="z. B. 39.99"></label>
+          ${bad ? '<div class="warn-box">Der Originalpreis muss höher als der Angebotspreis sein – sonst wird er nicht angezeigt.</div>' : ''}
+          ${ew && Math.abs((d.wasPrice || 0) - ew.price) > 0.004 ? `<button class="btn btn-sm" type="button" data-do="wasFromExpert">Statt-Preis von expert.de übernehmen (${esc(euro(ew.price))})</button>` : ''}
+        ` : (ew ? `<div class="uvp-note">expert.de zeigt hier einen Statt-Preis von ${esc(euro(ew.price))} – „Angebot“ anhaken, um ihn durchgestrichen anzuzeigen.</div>` : '')}
+      </div>`;
+  }
+
   function logoBlock(t) {
     const d = t.data;
     const src = PT.logoSrcFor(d);
@@ -772,6 +791,7 @@
         <label class="ed-field"><span>Preis (€) ${m.fetchedPrice != null ? (priceChanged ? '<span class="pill pill-warn">manuell geändert</span>' : '<span class="pill pill-ok">expert.de Asbach</span>') : ''}</span>
           <input type="number" step="0.01" min="0" data-k="price" value="${d.price != null ? d.price : ''}"></label>
         ${priceChanged ? `<div class="warn-box">Abweichung vom Marktpreis auf expert.de (${euro(m.fetchedPrice)}).</div>` : ''}
+        ${offerBlock(t)}
         ${uvpBlock(t)}
       </section>
       <section class="ed-section">
@@ -795,6 +815,18 @@
       t.data.uvp = v === '' ? null : Math.round(parseFloat(v.replace(',', '.')) * 100) / 100;
       t.meta.uvp = { manual: true, status: 'manual' };
     } else if (k === 'showUvp') t.data.showUvp = e.target.checked;
+    else if (k === 'offer') {
+      t.data.offer = e.target.checked;
+      // Vorschlag: Statt-Preis von expert.de, sonst der bisherige Preis (dann den Angebotspreis eintragen)
+      if (t.data.offer && t.data.wasPrice == null) {
+        const ew = t.meta && t.meta.expertWas;
+        t.data.wasPrice = ew ? ew.price : t.data.price;
+      }
+      save(); renderList(); renderStageDebounced(); renderEditor();
+      const inp = $('#editor input[data-k="wasPrice"]');
+      if (inp && t.data.offer) inp.focus();
+      return;
+    } else if (k === 'wasPrice') t.data.wasPrice = v === '' ? null : Math.round(parseFloat(v.replace(',', '.')) * 100) / 100;
     else t.data[k] = v;
     if (t.status === 'manual' || t.status === 'ok' || t.status === 'error') { /* Status bleibt */ }
     save();
@@ -804,7 +836,7 @@
   });
   $('#editor').addEventListener('change', (e) => {
     const k = e.target.dataset.k;
-    if (k === 'price' || k === 'uvp') renderEditor();
+    if (k === 'price' || k === 'uvp' || k === 'wasPrice') renderEditor();
   });
 
   function updateSavingsField(t) {
@@ -826,6 +858,9 @@
       enqueueFetch(t); renderEditor();
     } else if (a === 'googleUvp') {
       openGoogleUvp(t);
+    } else if (a === 'wasFromExpert') {
+      if (t.meta.expertWas) t.data.wasPrice = t.meta.expertWas.price;
+      save(); renderList(); renderStageDebounced(); renderEditor();
     } else if (a === 'ackChange') {
       if (t.meta.priceCheck) t.meta.priceCheck.ack = true;
       save(); renderList(); renderEditor();
@@ -1319,7 +1354,7 @@ ${pages.map((p) => sheetHtml(p, opt)).join('\n')}
       t.meta.uvp = { status: newUvp ? 'expert' : 'none' };
     }
     Object.assign(t.meta, {
-      fetchedAt: r.fetchedAt, fetchedPrice: r.price,
+      fetchedAt: r.fetchedAt, fetchedPrice: r.price, expertWas: r.expertWas || null,
       storeStock: r.priceInfo && r.priceInfo.storeStock, shownOnPage: r.priceInfo && r.priceInfo.shownOnPage,
       priceCheck: { at: new Date().toISOString(), changes },
     });

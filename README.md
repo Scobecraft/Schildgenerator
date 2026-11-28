@@ -47,6 +47,7 @@ Lange Namen werden automatisch gekürzt (Teil vor dem ersten Komma, ohne Klammer
 ### Preise aktuell halten
 
 - **↻ Preise prüfen** holt Preis, UVP und Bestand aller Schilder im Set neu von expert.de. Eigene Änderungen (Name, Eigenschaften, Positionen) bleiben, jede Preisänderung wird am Schild markiert.
+- **Angebot:** Im Editor unter „Preis“ den Haken **Angebot** setzen und den **Originalpreis** eintragen (vorgeschlagen wird der Statt-Preis von expert.de, falls vorhanden, sonst der bisherige Preis – dann oben den Angebotspreis eintragen). Auf dem Schild steht der Originalpreis kleiner, rot durchgestrichen links neben dem Angebotspreis – in allen Vorlagen. Angezeigt wird er nur, wenn er höher ist als der Angebotspreis.
 - **Preis-Wächter:** Jedes gedruckte Schild wird 180 Tage lang gemerkt und **täglich ab 6 Uhr** gegen expert.de geprüft. Die Glocke oben zeigt, wie viele Schilder im Laden einen veralteten Preis haben; „Nachdrucken“ legt ein neues Set mit genau diesen Artikeln an. Wer beim Drucken einen eigenen Preis eingetragen hat, wird nur gewarnt, wenn sich der expert-Preis ändert.
 
 ### Drucken
