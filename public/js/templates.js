@@ -477,12 +477,14 @@
   };
 
   // Angebot: durchgestrichener Originalpreis neben dem Preis
-  const WAS = {
-    size: 0.5,       // Ziffernhöhe im Verhältnis zum Preis
-    gap: 0.06,       // Abstand zum Preis (in Ziffernhöhen des Preises, zusätzlich zu den Konturen)
+const WAS = {
+    size: 0.6,       // Ziffernhöhe im Verhältnis zum Preis
+    raise: 0.74,     // Grundlinie so weit über der Grundlinie des Preises (in Ziffernhöhen des Preises)
+    overlap: 0.10,   // so weit ragt der Originalpreis hinter den Preis (in Ziffernhöhen des Preises)
+    tilt: -6,        // leicht gekippt (Grad)
     color: '#1d1d1b',
     strike: '#e3000f',
-    line: 0.085,     // Dicke der Streichlinie (in Ziffernhöhen des Originalpreises)
+    line: 0.09,      // Dicke der Streichlinie (in Ziffernhöhen des Originalpreises)
   };
 
   function el(name, attrs) {
@@ -573,30 +575,31 @@
     const mainG = el('g');
     inner.appendChild(mainG);
     draw(priceItems(value, cap, 0, 0), P.blue, mainG);
-    // Angebot: Originalpreis kleiner links daneben, rot durchgestrichen; beides zusammen wird eingepasst
+    // Angebot: Originalpreis versetzt oben links, leicht gekippt, rot durchgestrichen.
+    // Er steckt ein Stück hinter dem Angebotspreis; beides zusammen wird ins Feld eingepasst.
     const was = parseFloat(box.dataset.was);
-    if (was > value) {
+    const hasWas = was > value;
+    if (hasWas) {
       const wc = cap * WAS.size;
       const wasG = el('g');
       inner.insertBefore(wasG, mainG);
       const mb = mainG.getBBox();
-      // vorläufig bei x=0 zeichnen, Breite messen, dann links neben den Preis schieben
-      const wItems = priceItems(was, wc, 0, -(cap - wc) / 2);
       const tmp = el('g');
       wasG.appendChild(tmp);
-      draw(wItems, WAS.color, tmp);
+      draw(priceItems(was, wc, 0, 0), WAS.color, tmp);
       const wb = tmp.getBBox();
-      const gap = cap * WAS.gap;
-      // rechte Kante des Originalpreises (mit Kontur) bis zur linken Kante des Preises (mit Kontur)
-      const shift = mb.x - P.stroke / 2 - (wb.x + wb.width + (P.stroke * WAS.size) / 2) - gap;
-      tmp.setAttribute('transform', `translate(${shift.toFixed(3)} 0)`);
-      // Streichlinie: von unten links nach oben rechts über die Ziffern, weiß unterlegt
-      const x1 = wb.x + shift - wc * 0.08, x2 = wb.x + wb.width + shift + wc * 0.04;
-      const mid = -(cap - wc) / 2 - wc / 2; // Mitte der Ziffern
-      const yTop = mid - wc * 0.32, yBot = mid + wc * 0.32;
+      // Lage: Grundlinie im oberen Teil des Preises, rechte Kante ragt etwas über den Preisanfang
+      const dx = mb.x + cap * WAS.overlap - (wb.x + wb.width);
+      const dy = -cap * WAS.raise;
+      // Streichlinie quer über die Ziffern (leicht ansteigend), weiß unterlegt
       const lw = wc * WAS.line;
-      wasG.appendChild(el('line', { x1, y1: yBot, x2, y2: yTop, stroke: '#fff', 'stroke-width': (lw + P.stroke * WAS.size).toFixed(3), 'stroke-linecap': 'round' }));
-      wasG.appendChild(el('line', { x1, y1: yBot, x2, y2: yTop, stroke: WAS.strike, 'stroke-width': lw.toFixed(3), 'stroke-linecap': 'round' }));
+      const x1 = wb.x - wc * 0.06, x2 = wb.x + wb.width + wc * 0.04;
+      const y1 = -wc * 0.36, y2 = -wc * 0.56;
+      tmp.appendChild(el('line', { x1, y1, x2, y2, stroke: '#fff', 'stroke-width': (lw * 2.2).toFixed(3), 'stroke-linecap': 'round' }));
+      tmp.appendChild(el('line', { x1, y1, x2, y2, stroke: WAS.strike, 'stroke-width': lw.toFixed(3), 'stroke-linecap': 'round' }));
+      // gekippt um die rechte untere Ecke
+      const cx = wb.x + wb.width, cy = 0;
+      wasG.setAttribute('transform', `translate(${dx.toFixed(3)} ${dy.toFixed(3)}) rotate(${WAS.tilt} ${cx.toFixed(3)} ${cy})`);
     }
 
     // Modus "füllen" (z. B. Blister): Preis so groß wie der freie Platz erlaubt – wie im Original.
@@ -604,7 +607,8 @@
     if (box.dataset.pfill === '1') {
       const bb0 = inner.getBBox();
       const top = num('ptop', 0), maxW = num('pmaxw', bw);
-      const s = Math.max(0.2, Math.min((P.baseline - top) / capH, maxW / bb0.width));
+      const hTop = hasWas ? Math.max(capH, -bb0.y) : capH;
+      const s = Math.max(0.2, Math.min((P.baseline - top) / hTop, maxW / bb0.width));
       let left = P.centerX - (bb0.width * s) / 2;
       left = Math.max((bw - maxW) / 2, Math.min(left, bw - (bw - maxW) / 2 - bb0.width * s));
       inner.setAttribute('transform', `translate(${(left - bb0.x * s).toFixed(3)} ${P.baseline.toFixed(3)}) scale(${s.toFixed(4)})`);
@@ -615,10 +619,13 @@
     const pad = P.stroke / 2 + 0.8;
     const width = bb.width + pad * 2;
     const height = capH + pad * 2; // Ziffernhöhe zählt, nicht die Schrift-Metrik
-    const scale = Math.min(1, (bw) / width, (bh) / height);
+    let scale = Math.min(1, (bw) / width, (bh) / height);
+    // Angebot: der Originalpreis ragt nach oben – muss auch noch ins Feld passen
+    if (hasWas && -bb.y > capH) scale = Math.min(scale, (P.baseline - pad * 0.5) / -bb.y, bh / (bb.height + pad));
     let left = P.centerX - (bb.width * scale) / 2;
     left = Math.max(pad * scale, Math.min(left, bw - bb.width * scale - pad * scale));
-    const baseY = P.baseline + (1 - scale) * capH * 0.5;
+    let baseY = P.baseline + (1 - scale) * capH * 0.5;
+    if (hasWas) baseY = Math.min(Math.max(baseY, -bb.y * scale + pad * 0.5 * scale), bh - (bb.y + bb.height) * scale);
     inner.setAttribute('transform', `translate(${(left - bb.x * scale).toFixed(3)} ${baseY.toFixed(3)}) scale(${scale.toFixed(4)})`);
   }
 
